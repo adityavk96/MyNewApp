@@ -1,6 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
-import { Briefcase, Code, Smartphone, Palette, FileText } from "lucide-react";
+import {  FileText } from "lucide-react";
 
 const Services = () => {
   const servicesList = [
