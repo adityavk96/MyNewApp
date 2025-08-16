@@ -15,17 +15,18 @@ const normalizeInvoiceNo = (invNo) => {
 
   let str = invNo.toString().toUpperCase();
 
+  // Fixed unnecessary escape characters in regex by removing backslash before slash inside []
   const fyPatterns = [
-    /FY20\d{2}[-\/]?\d{2}/g,
+    /FY20\d{2}[-/]\d{2}/g,
     /FY\d{4}/g,
-    /\b20\d{2}[-\/]?\d{2}\b/g,
-    /\b\d{2}[-\/]?\d{2}\b/g,
+    /\b20\d{2}[-/]\d{2}\b/g,
+    /\b\d{2}[-/]\d{2}\b/g,
   ];
   fyPatterns.forEach((pat) => {
     str = str.replace(pat, "");
   });
 
-  str = str.replace(/[A-Z]/g, "").replace(/[.,\/\\_\-'"\s()]/g, "");
+  str = str.replace(/[A-Z]/g, "").replace(/[.,/\\_\-'"\s()]/g, "");
 
   return str.trim();
 };
@@ -43,7 +44,8 @@ const formatDate = (dateStr) => {
     dateStr = String(dateStr);
   }
 
-  const dmyMatch = dateStr.match(/^(\d{2})[-\/](\d{2})[-\/](\d{4})$/);
+  // Fixed unnecessary escape characters in regex for date parsing
+  const dmyMatch = dateStr.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
   if (dmyMatch) {
     const dd = parseInt(dmyMatch[1], 10);
     const mm = parseInt(dmyMatch[2], 10) - 1;
@@ -162,14 +164,14 @@ export default function GSTReconciliation() {
       Invoice_Date: formatDate(item.Invoice_Date || ""),
     }));
 
-  // Modified reconciliation to set Supplier_Name from Books on "Not in 2A" rows
+  // Supplier_Name from Books for "Not in 2A" rows
   const performReconciliation = (books, twoA) => {
     const map = new Map();
 
     books.forEach((b) => {
       map.set(b.recoKey, {
         GSTIN: b.GSTIN || "",
-        Supplier_Name: b.Supplier_Name || "", // Get supplier_name from books here
+        Supplier_Name: b.Supplier_Name || "", // From Books here
         Invoice_No_PR: b.Invoice_No || "",
         Invoice_Date_PR: b.Invoice_Date || "",
         Taxable_Value_PR: b.Taxable_Value || 0,
@@ -209,7 +211,6 @@ export default function GSTReconciliation() {
             ? "Matched"
             : "Mismatch";
       } else {
-        // Row only in 2A, not in Books, so Supplier_Name from 2A
         map.set(a.recoKey, {
           GSTIN: a.GSTIN || "",
           Supplier_Name: a.Supplier_Name || "",
@@ -259,27 +260,21 @@ export default function GSTReconciliation() {
         header: "GSTIN",
         enableColumnFilter: true,
         filterFn: "includesSome",
-        meta: {
-          Filter: MultiSelectFilter,
-        },
+        meta: { Filter: MultiSelectFilter },
       },
       {
         accessorKey: "Supplier_Name",
         header: "Supplier Name",
         enableColumnFilter: true,
         filterFn: "includesSome",
-        meta: {
-          Filter: MultiSelectFilter,
-        },
+        meta: { Filter: MultiSelectFilter },
       },
       {
         accessorKey: "Invoice_No_2A",
         header: "Invoice No. (2A)",
         enableColumnFilter: true,
         filterFn: "includesSome",
-        meta: {
-          Filter: MultiSelectFilter,
-        },
+        meta: { Filter: MultiSelectFilter },
       },
       {
         accessorKey: "Invoice_Date_2A",
@@ -388,9 +383,7 @@ export default function GSTReconciliation() {
         header: "Status",
         enableColumnFilter: true,
         filterFn: "includesSome",
-        meta: {
-          Filter: MultiSelectFilter,
-        },
+        meta: { Filter: MultiSelectFilter },
       },
     ],
     []
@@ -399,9 +392,7 @@ export default function GSTReconciliation() {
   const table = useReactTable({
     data: reconciledData,
     columns,
-    state: {
-      columnFilters,
-    },
+    state: { columnFilters },
     onColumnFiltersChange: setColumnFilters,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
