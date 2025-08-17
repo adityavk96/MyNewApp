@@ -7,6 +7,7 @@ import SideMenu from './my components/SideMenu';
 import Login from './my components/login';
 import GstReconciliation from './my components/GstReconciliation';
 import './App.css';
+import GstReco2B from './my components/GstReco'; // Import the GSTR 2B component
 
 
 function App() {
@@ -40,6 +41,7 @@ function App() {
           <Route path="/services" element={<Services />} />
           <Route path="/login" element={<Login />} />
           <Route path="/gst-reconciliation" element={<GstReconciliation />} />
+          <Route path="/gst-reco" element={<GstReco2B />} />
           {/* You can add an About page route here later */}
           {/* <Route path="/about" element={<About />} /> */}
         </Routes>
