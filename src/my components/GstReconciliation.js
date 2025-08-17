@@ -13,23 +13,27 @@ const animatedComponents = makeAnimated();
 const normalizeInvoiceNo = (invNo) => {
   if (!invNo) return "";
   let str = invNo.toString().toUpperCase();
-  const fyPatterns = [
-    /FY20\d{2}[-/]\d{2}/g,
-    /FY\d{4}/g,
-    /\b20\d{2}[-/]\d{2}\b/g,
-    /\b\d{2}[-/]\d{2}\b/g,
-  ];
-  fyPatterns.forEach((pat) => {
-    str = str.replace(pat, "");
-  });
-  str = str.replace(/[A-Z]/g, "").replace(/[.,/\\_\-'" \s()]/g, "");
+
+  // Remove the "PR" prefix and any following leading zeros
+  str = str.replace(/^PR0*/, "");
+
+  // Remove all non-numeric and non-alphanumeric characters like 'a', 'G', '/', ' ', etc.
+  // This will handle cases like '2a G/008143' -> '2AG008143'
+  str = str.replace(/[^A-Z0-9]/g, "");
+
+  // Remove all letters
+  str = str.replace(/[A-Z]/g, "");
+
+  // Remove leading zeros from the remaining string, but keep one if it's the only character
+  str = str.replace(/^0+(?=\d)/, "");
+
   return str.trim();
 };
 
 // Robust parser for DD-MM-YYYY/YY with separators -, /, . or space
 const parseDDMMYYYY = (str) => {
   if (!str) return "";
-  const match = str.match(/^(\d{1,2})[.\-\/ ](\d{1,2})[.\-\/ ](\d{2,4})$/);
+  const match = str.match(/^(\d{1,2})[.\-/ ](\d{1,2})[.\-/ ](\d{2,4})$/);
   if (match) {
     let dd = parseInt(match[1], 10);
     let mm = parseInt(match[2], 10);
