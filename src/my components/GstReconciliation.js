@@ -12,9 +12,7 @@ const animatedComponents = makeAnimated();
 
 const normalizeInvoiceNo = (invNo) => {
   if (!invNo) return "";
-
   let str = invNo.toString().toUpperCase();
-
   const fyPatterns = [
     /FY20\d{2}[-/]\d{2}/g,
     /FY\d{4}/g,
@@ -24,17 +22,35 @@ const normalizeInvoiceNo = (invNo) => {
   fyPatterns.forEach((pat) => {
     str = str.replace(pat, "");
   });
-
   str = str.replace(/[A-Z]/g, "").replace(/[.,/\\_\-'" \s()]/g, "");
-
   return str.trim();
 };
 
-// ✅ FIXED formatDate function
+// Robust parser for DD-MM-YYYY/YY with separators -, /, . or space
+const parseDDMMYYYY = (str) => {
+  if (!str) return "";
+  const match = str.match(/^(\d{1,2})[.\-\/ ](\d{1,2})[.\-\/ ](\d{2,4})$/);
+  if (match) {
+    let dd = parseInt(match[1], 10);
+    let mm = parseInt(match[2], 10);
+    let yyyy = parseInt(match[3], 10);
+    if (yyyy < 100) yyyy += 2000;
+    if (mm < 1 || mm > 12) return "";
+    const d = new Date(yyyy, mm - 1, dd);
+    if (!isNaN(d.getTime())) {
+      const outDD = String(d.getDate()).padStart(2, "0");
+      const outMM = String(d.getMonth() + 1).padStart(2, "0");
+      const outYYYY = d.getFullYear();
+      return `${outDD}-${outMM}-${outYYYY}`;
+    }
+  }
+  return "";
+};
+
 const formatDate = (dateVal) => {
   if (!dateVal) return "";
 
-  // 1. Excel serial number (e.g., 45853 -> 15-07-2025)
+  // Excel serial number, fallback if any from other sources (should not apply if raw:false)
   if (typeof dateVal === "number") {
     const excelEpoch = new Date(1900, 0, 1);
     const date = new Date(excelEpoch.getTime() + (dateVal - 2) * 86400000);
@@ -46,7 +62,7 @@ const formatDate = (dateVal) => {
     }
   }
 
-  // 2. JS Date object
+  // JS Date object
   if (dateVal instanceof Date) {
     if (isNaN(dateVal.getTime())) return "";
     const dd = String(dateVal.getDate()).padStart(2, "0");
@@ -55,25 +71,13 @@ const formatDate = (dateVal) => {
     return `${dd}-${mm}-${yyyy}`;
   }
 
-  // 3. String
+  // String => try robust parser first
   if (typeof dateVal === "string") {
-    const dmyMatch = dateVal.match(/^(\d{2})[-/](\d{2})[-/](\d{2,4})$/);
-    if (dmyMatch) {
-      const dd = parseInt(dmyMatch[1], 10);
-      const mm = parseInt(dmyMatch, 10) - 1;
-      let yyyy = parseInt(dmyMatch, 10);
-      if (yyyy < 100) yyyy += 2000;
-      const d = new Date(yyyy, mm, dd);
-      if (!isNaN(d.getTime())) {
-        const outDD = String(d.getDate()).padStart(2, "0");
-        const outMM = String(d.getMonth() + 1).padStart(2, "0");
-        const outYYYY = d.getFullYear();
-        return `${outDD}-${outMM}-${outYYYY}`;
-      }
-    }
+    const parsed = parseDDMMYYYY(dateVal);
+    if (parsed) return parsed;
   }
 
-  // 4. Fallback
+  // Last fallback
   const d = new Date(dateVal);
   if (!isNaN(d.getTime())) {
     const dd = String(d.getDate()).padStart(2, "0");
@@ -88,17 +92,11 @@ const formatDate = (dateVal) => {
 const toNum = (val) => (isNaN(parseFloat(val)) ? 0 : parseFloat(val));
 const fmt = (n) =>
   typeof n === "number"
-    ? n.toLocaleString("en-IN", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })
+    ? n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : n;
 
 const createOptions = (values) =>
-  values
-    .filter((v) => v !== undefined && v !== null)
-    .sort()
-    .map((v) => ({ label: v === "" ? "(Blank)" : v, value: v }));
+  values.filter((v) => v !== undefined && v !== null).sort().map((v) => ({ label: v === "" ? "(Blank)" : v, value: v }));
 
 function MultiSelectFilter({ column, table }) {
   const uniqueValues = useMemo(() => {
@@ -113,11 +111,7 @@ function MultiSelectFilter({ column, table }) {
   const values = column.getFilterValue() || [];
 
   const onChange = (selectedOptions) => {
-    if (!selectedOptions) {
-      column.setFilterValue([]);
-    } else {
-      column.setFilterValue(selectedOptions.map((o) => o.value));
-    }
+    column.setFilterValue(selectedOptions ? selectedOptions.map((o) => o.value) : []);
   };
 
   return (
@@ -127,9 +121,7 @@ function MultiSelectFilter({ column, table }) {
       closeMenuOnSelect={false}
       hideSelectedOptions={false}
       components={animatedComponents}
-      value={createOptions(uniqueValues).filter((o) =>
-        values.includes(o.value)
-      )}
+      value={createOptions(uniqueValues).filter((o) => values.includes(o.value))}
       onChange={onChange}
       placeholder="Filter..."
       className="mt-1"
@@ -146,7 +138,10 @@ export default function GSTReconciliation() {
   const parseExcel = (buffer) => {
     const workbook = XLSX.read(buffer, { type: "array" });
     const sheetName = workbook.SheetNames[0];
-    return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+    return XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+      raw: false, // get formatted string dates to avoid serial confusion
+      defval: "",
+    });
   };
 
   const handleFileUpload = (e, setData) => {
@@ -167,23 +162,29 @@ export default function GSTReconciliation() {
     reader.readAsArrayBuffer(file);
   };
 
-  const processRawData = (data) =>
-    data.map((item) => ({
-      ...item,
-      recoKey: `${(item.GSTIN || "").toString().trim().toUpperCase()}__${normalizeInvoiceNo(
-        item.Invoice_No
-      )}`,
-      Taxable_Value: toNum(item.Taxable_Value),
-      IGST: toNum(item.IGST),
-      CGST: toNum(item.CGST),
-      SGST: toNum(item.SGST),
-      Cess: toNum(item.Cess),
-      Invoice_Date: formatDate(item.Invoice_Date || ""),
-    }));
+  const processRawData = (data, source) =>
+    data.map((item) => {
+      let formattedDate = "";
+      if (source === "2A" && typeof item.Invoice_Date === "string") {
+        formattedDate = parseDDMMYYYY(item.Invoice_Date);
+      }
+      if (!formattedDate) {
+        formattedDate = formatDate(item.Invoice_Date || "");
+      }
+      return {
+        ...item,
+        recoKey: `${(item.GSTIN || "").toString().trim().toUpperCase()}__${normalizeInvoiceNo(item.Invoice_No)}`,
+        Taxable_Value: toNum(item.Taxable_Value),
+        IGST: toNum(item.IGST),
+        CGST: toNum(item.CGST),
+        SGST: toNum(item.SGST),
+        Cess: toNum(item.Cess),
+        Invoice_Date: formattedDate,
+      };
+    });
 
   const performReconciliation = (books, twoA) => {
     const map = new Map();
-
     books.forEach((b) => {
       map.set(b.recoKey, {
         GSTIN: b.GSTIN || "",
@@ -220,10 +221,10 @@ export default function GSTReconciliation() {
         const eq = (x, y) => Math.abs(toNum(x) - toNum(y)) < 0.01;
         existing.Status =
           eq(existing.Taxable_Value_2A, existing.Taxable_Value_PR) &&
-          eq(existing.IGST_2A, existing.IGST_PR) &&
-          eq(existing.CGST_2A, existing.CGST_PR) &&
-          eq(existing.SGST_2A, existing.SGST_PR) &&
-          eq(existing.Cess_2A, existing.Cess_PR)
+            eq(existing.IGST_2A, existing.IGST_PR) &&
+            eq(existing.CGST_2A, existing.CGST_PR) &&
+            eq(existing.SGST_2A, existing.SGST_PR) &&
+            eq(existing.Cess_2A, existing.Cess_PR)
             ? "Matched"
             : "Mismatch";
       } else {
@@ -271,28 +272,28 @@ export default function GSTReconciliation() {
 
   const columns = useMemo(
     () => [
-      { accessorKey: "GSTIN", header: "GSTIN", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter }, },
-      { accessorKey: "Supplier_Name", header: "Supplier Name", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter }, },
-      { accessorKey: "Invoice_No_2A", header: "Invoice No. (2A)", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter }, },
+      { accessorKey: "GSTIN", header: "GSTIN", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter } },
+      { accessorKey: "Supplier_Name", header: "Supplier Name", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter } },
+      { accessorKey: "Invoice_No_2A", header: "Invoice No. (2A)", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter } },
       { accessorKey: "Invoice_No_PR", header: "Invoice No. (PR)" },
       { accessorKey: "Invoice_Date_2A", header: "Invoice Date (2A)" },
       { accessorKey: "Invoice_Date_PR", header: "Invoice Date (PR)" },
-      { accessorKey: "Taxable_Value_2A", header: "Taxable Value (2A)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true }, },
-      { accessorKey: "Taxable_Value_PR", header: "Taxable Value (PR)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true }, },
-      { accessorKey: "IGST_2A", header: "IGST (2A)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true }, },
-      { accessorKey: "IGST_PR", header: "IGST (PR)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true }, },
-      { accessorKey: "CGST_2A", header: "CGST (2A)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true }, },
-      { accessorKey: "CGST_PR", header: "CGST (PR)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true }, },
-      { accessorKey: "SGST_2A", header: "SGST (2A)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true }, },
-      { accessorKey: "SGST_PR", header: "SGST (PR)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true }, },
-      { accessorKey: "Cess_2A", header: "Cess (2A)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true }, },
-      { accessorKey: "Cess_PR", header: "Cess (PR)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true }, },
-      { accessorKey: "Diff_Taxable", header: "Diff Taxable", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true }, },
-      { accessorKey: "Diff_IGST", header: "Diff IGST", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true }, },
-      { accessorKey: "Diff_CGST", header: "Diff CGST", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true }, },
-      { accessorKey: "Diff_SGST", header: "Diff SGST", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true }, },
-      { accessorKey: "Diff_Cess", header: "Diff Cess", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true }, },
-      { accessorKey: "Status", header: "Status", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter }, },
+      { accessorKey: "Taxable_Value_2A", header: "Taxable Value (2A)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
+      { accessorKey: "Taxable_Value_PR", header: "Taxable Value (PR)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
+      { accessorKey: "IGST_2A", header: "IGST (2A)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
+      { accessorKey: "IGST_PR", header: "IGST (PR)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
+      { accessorKey: "CGST_2A", header: "CGST (2A)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
+      { accessorKey: "CGST_PR", header: "CGST (PR)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
+      { accessorKey: "SGST_2A", header: "SGST (2A)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
+      { accessorKey: "SGST_PR", header: "SGST (PR)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
+      { accessorKey: "Cess_2A", header: "Cess (2A)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
+      { accessorKey: "Cess_PR", header: "Cess (PR)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
+      { accessorKey: "Diff_Taxable", header: "Diff Taxable", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
+      { accessorKey: "Diff_IGST", header: "Diff IGST", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
+      { accessorKey: "Diff_CGST", header: "Diff CGST", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
+      { accessorKey: "Diff_SGST", header: "Diff SGST", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
+      { accessorKey: "Diff_Cess", header: "Diff Cess", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
+      { accessorKey: "Status", header: "Status", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter } },
     ],
     []
   );
@@ -327,12 +328,48 @@ export default function GSTReconciliation() {
       acc.Diff_Cess += toNum(d.Diff_Cess);
       return acc;
     },
-    { Taxable_Value_2A: 0, Taxable_Value_PR: 0, IGST_2A: 0, IGST_PR: 0, CGST_2A: 0, CGST_PR: 0, SGST_2A: 0, SGST_PR: 0, Cess_2A: 0, Cess_PR: 0, Diff_Taxable: 0, Diff_IGST: 0, Diff_CGST: 0, Diff_SGST: 0, Diff_Cess: 0 }
+    {
+      Taxable_Value_2A: 0,
+      Taxable_Value_PR: 0,
+      IGST_2A: 0,
+      IGST_PR: 0,
+      CGST_2A: 0,
+      CGST_PR: 0,
+      SGST_2A: 0,
+      SGST_PR: 0,
+      Cess_2A: 0,
+      Cess_PR: 0,
+      Diff_Taxable: 0,
+      Diff_IGST: 0,
+      Diff_CGST: 0,
+      Diff_SGST: 0,
+      Diff_Cess: 0,
+    }
   );
 
   const downloadFormat = () => {
-    const headers = ["GSTIN", "Supplier_Name", "Invoice_No", "Invoice_Date", "Taxable_Value", "IGST", "CGST", "SGST", "Cess"];
-    const sampleRow = { GSTIN: "27ABCDE1234F1Z5", Supplier_Name: "Sample Supplier", Invoice_No: "INV001", Invoice_Date: "01-07-2024", Taxable_Value: 1000, IGST: 90, CGST: 90, SGST: 90, Cess: 0 };
+    const headers = [
+      "GSTIN",
+      "Supplier_Name",
+      "Invoice_No",
+      "Invoice_Date",
+      "Taxable_Value",
+      "IGST",
+      "CGST",
+      "SGST",
+      "Cess",
+    ];
+    const sampleRow = {
+      GSTIN: "27ABCDE1234F1Z5",
+      Supplier_Name: "Sample Supplier",
+      Invoice_No: "INV001",
+      Invoice_Date: "01-07-2024",
+      Taxable_Value: 1000,
+      IGST: 90,
+      CGST: 90,
+      SGST: 90,
+      Cess: 0,
+    };
     const ws = XLSX.utils.json_to_sheet([sampleRow], { header: headers });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Format");
@@ -343,7 +380,9 @@ export default function GSTReconciliation() {
     const order = columns.map((c) => c.accessorKey || c.id);
     const data = table.getFilteredRowModel().rows.map((r) => {
       const row = {};
-      order.forEach((col) => { row[col] = r.original[col]; });
+      order.forEach((col) => {
+        row[col] = r.original[col];
+      });
       return row;
     });
     const ws = XLSX.utils.json_to_sheet(data, { header: order });
@@ -359,12 +398,22 @@ export default function GSTReconciliation() {
       <div className="mb-4 flex flex-wrap gap-4 items-center justify-center">
         <label className="cursor-pointer bg-blue-600 text-white px-4 py-2 rounded inline-block">
           Upload GSTR-2A (xlsx)
-          <input type="file" accept=".xlsx,.xls" onChange={(e) => handleFileUpload(e, setData2A)} className="hidden" />
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={(e) => handleFileUpload(e, setData2A)}
+            className="hidden"
+          />
         </label>
 
         <label className="cursor-pointer bg-blue-600 text-white px-4 py-2 rounded inline-block">
           Upload Books (xlsx)
-          <input type="file" accept=".xlsx,.xls" onChange={(e) => handleFileUpload(e, setDataBooks)} className="hidden" />
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={(e) => handleFileUpload(e, setDataBooks)}
+            className="hidden"
+          />
         </label>
 
         <button
@@ -373,8 +422,8 @@ export default function GSTReconciliation() {
               alert("Please upload both files before reconciling.");
               return;
             }
-            const processedBooks = processRawData(dataBooks);
-            const processed2A = processRawData(data2A);
+            const processedBooks = processRawData(dataBooks, "Books");
+            const processed2A = processRawData(data2A, "2A");
             const result = performReconciliation(processedBooks, processed2A);
             setReconciledData(result);
             setColumnFilters([]);
@@ -384,30 +433,65 @@ export default function GSTReconciliation() {
           Reconcile
         </button>
 
-        <button onClick={downloadFormat} className="bg-gray-600 text-white px-4 py-2 rounded">
+        <button
+          onClick={downloadFormat}
+          className="bg-gray-600 text-white px-4 py-2 rounded"
+        >
           Download Format
         </button>
 
         {reconciledData.length > 0 && (
-          <button onClick={downloadReport} className="bg-indigo-600 text-white px-4 py-2 rounded ml-2">
-            Download Reconciliation Report
-          </button>
+          <>
+            <button
+              onClick={downloadReport}
+              className="bg-indigo-600 text-white px-4 py-2 rounded ml-2"
+            >
+              Download Reconciliation Report
+            </button>
+
+            <button
+              onClick={() => {
+                setReconciledData([]);
+                setData2A([]);
+                setDataBooks([]);
+                setColumnFilters([]);
+              }}
+              className="bg-gray-700 text-white px-4 py-2 rounded ml-2"
+            >
+              Go Back to Upload
+            </button>
+          </>
         )}
+
       </div>
 
+
+
       {reconciledData.length > 0 && (
-        <div className="overflow-auto max-h-[600px] border rounded" style={{ width: "100%", maxWidth: "100vw" }}>
-          <table className="border-collapse border border-gray-300 text-sm table-auto" style={{ width: "100%", tableLayout: "auto" }}>
+        <div
+          className="overflow-auto max-h-[600px] border rounded"
+          style={{ width: "100%", maxWidth: "100vw" }}
+        >
+          <table
+            className="border-collapse border border-gray-300 text-sm table-auto"
+            style={{ width: "100%", tableLayout: "auto" }}
+          >
             <thead className="bg-gray-100 sticky top-0 z-10">
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr key={headerGroup.id}>
                   {headerGroup.headers.map((header) => (
-                    <th key={header.id} className="border border-gray-300 px-2 py-1 text-left whitespace-nowrap">
+                    <th
+                      key={header.id}
+                      className="border border-gray-300 px-2 py-1 text-left whitespace-nowrap"
+                    >
                       {header.isPlaceholder ? null : (
                         <>
-                          {flexRender(header.column.columnDef.header, header.getContext())}
+                          {flexRender(
+                            header.column.columnDef.header,
+                            header.getContext()
+                          )}
                           {header.column.getCanFilter() &&
-                          header.column.columnDef.meta?.Filter ? (
+                            header.column.columnDef.meta?.Filter ? (
                             <header.column.columnDef.meta.Filter
                               column={header.column}
                               table={table}
@@ -420,24 +504,57 @@ export default function GSTReconciliation() {
                 </tr>
               ))}
               <tr className="font-bold bg-gray-200 sticky top-[68px] z-10">
-                <td colSpan={6} className="text-right border border-gray-300 px-2 py-1">
+                <td
+                  colSpan={6}
+                  className="text-right border border-gray-300 px-2 py-1"
+                >
                   Subtotal
                 </td>
-                <td className="border border-gray-300 px-2 py-1 text-right">{fmt(subtotal.Taxable_Value_2A)}</td>
-                <td className="border border-gray-300 px-2 py-1 text-right">{fmt(subtotal.Taxable_Value_PR)}</td>
-                <td className="border border-gray-300 px-2 py-1 text-right">{fmt(subtotal.IGST_2A)}</td>
-                <td className="border border-gray-300 px-2 py-1 text-right">{fmt(subtotal.IGST_PR)}</td>
-                <td className="border border-gray-300 px-2 py-1 text-right">{fmt(subtotal.CGST_2A)}</td>
-                <td className="border border-gray-300 px-2 py-1 text-right">{fmt(subtotal.CGST_PR)}</td>
-                <td className="border border-gray-300 px-2 py-1 text-right">{fmt(subtotal.SGST_2A)}</td>
-                <td className="border border-gray-300 px-2 py-1 text-right">{fmt(subtotal.SGST_PR)}</td>
-                <td className="border border-gray-300 px-2 py-1 text-right">{fmt(subtotal.Cess_2A)}</td>
-                <td className="border border-gray-300 px-2 py-1 text-right">{fmt(subtotal.Cess_PR)}</td>
-                <td className="border border-gray-300 px-2 py-1 text-right">{fmt(subtotal.Diff_Taxable)}</td>
-                <td className="border border-gray-300 px-2 py-1 text-right">{fmt(subtotal.Diff_IGST)}</td>
-                <td className="border border-gray-300 px-2 py-1 text-right">{fmt(subtotal.Diff_CGST)}</td>
-                <td className="border border-gray-300 px-2 py-1 text-right">{fmt(subtotal.Diff_SGST)}</td>
-                <td className="border border-gray-300 px-2 py-1 text-right">{fmt(subtotal.Diff_Cess)}</td>
+                <td className="border border-gray-300 px-2 py-1 text-right">
+                  {fmt(subtotal.Taxable_Value_2A)}
+                </td>
+                <td className="border border-gray-300 px-2 py-1 text-right">
+                  {fmt(subtotal.Taxable_Value_PR)}
+                </td>
+                <td className="border border-gray-300 px-2 py-1 text-right">
+                  {fmt(subtotal.IGST_2A)}
+                </td>
+                <td className="border border-gray-300 px-2 py-1 text-right">
+                  {fmt(subtotal.IGST_PR)}
+                </td>
+                <td className="border border-gray-300 px-2 py-1 text-right">
+                  {fmt(subtotal.CGST_2A)}
+                </td>
+                <td className="border border-gray-300 px-2 py-1 text-right">
+                  {fmt(subtotal.CGST_PR)}
+                </td>
+                <td className="border border-gray-300 px-2 py-1 text-right">
+                  {fmt(subtotal.SGST_2A)}
+                </td>
+                <td className="border border-gray-300 px-2 py-1 text-right">
+                  {fmt(subtotal.SGST_PR)}
+                </td>
+                <td className="border border-gray-300 px-2 py-1 text-right">
+                  {fmt(subtotal.Cess_2A)}
+                </td>
+                <td className="border border-gray-300 px-2 py-1 text-right">
+                  {fmt(subtotal.Cess_PR)}
+                </td>
+                <td className="border border-gray-300 px-2 py-1 text-right">
+                  {fmt(subtotal.Diff_Taxable)}
+                </td>
+                <td className="border border-gray-300 px-2 py-1 text-right">
+                  {fmt(subtotal.Diff_IGST)}
+                </td>
+                <td className="border border-gray-300 px-2 py-1 text-right">
+                  {fmt(subtotal.Diff_CGST)}
+                </td>
+                <td className="border border-gray-300 px-2 py-1 text-right">
+                  {fmt(subtotal.Diff_SGST)}
+                </td>
+                <td className="border border-gray-300 px-2 py-1 text-right">
+                  {fmt(subtotal.Diff_Cess)}
+                </td>
                 <td className="border border-gray-300 px-2 py-1"></td>
               </tr>
             </thead>
@@ -449,18 +566,17 @@ export default function GSTReconciliation() {
                     row.original.Status === "Mismatch"
                       ? "bg-red-50"
                       : row.original.Status === "Matched"
-                      ? "bg-green-50"
-                      : ""
+                        ? "bg-green-50"
+                        : ""
                   }
                 >
                   {row.getVisibleCells().map((cell) => (
                     <td
                       key={cell.id}
-                      className={`border border-gray-300 px-2 py-1 ${
-                        cell.column.columnDef.meta?.isNumeric
+                      className={`border border-gray-300 px-2 py-1 ${cell.column.columnDef.meta?.isNumeric
                           ? "text-right"
                           : "text-left"
-                      } whitespace-nowrap`}
+                        } whitespace-nowrap`}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
