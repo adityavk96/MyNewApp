@@ -99,7 +99,7 @@ const extractMonthFromInvoiceNo = (invNo) => {
   ];
 
   // Pattern 1: MMM-YY (e.g., "Jan-24", "Mar.23")
-  let match = invNo.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[-.\/]?(\d{2})/i);
+  let match = invNo.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[-./]?(\d{2})/i);
   if (match) {
     const month = match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase();
     const year = match[2];
@@ -107,7 +107,7 @@ const extractMonthFromInvoiceNo = (invNo) => {
   }
 
   // Pattern 2: MM-YY (e.g., "01-24", "5/23")
-  match = invNo.match(/(\d{1,2})[-.\/](\d{2})/);
+  match = invNo.match(/(\d{1,2})[-./](\d{2})/);
   if (match) {
     const monthIndex = parseInt(match[1], 10) - 1;
     const year = match[2];
@@ -160,37 +160,6 @@ function MultiSelectFilter({ column, table }) {
   );
 }
 
-function ThreeBStatus({ status, month, previousMonth, monthOf2B }) {
-  // Helper comparisons to keep it readable
-  
-  const isPreviousMonth = month === previousMonth;
-  const isLessThanPreviousMonth = month < previousMonth; // assuming numeric or comparable value
-
-  if (status === "NOT IN 2B") {
-    return <span>{""}</span>; // Blank
-  }
-
-  if (status === "NOT IN BOOKS") {
-    if (isPreviousMonth) {
-      return <span>CLAIM AND REVERSED</span>;
-    }
-    if (isLessThanPreviousMonth) {
-      return <span>CLAIM AND REVERSED IN {monthOf2B}</span>;
-    }
-  }
-
-  if (status === "Matched" || status === "Mismatch") {
-    if (isPreviousMonth) {
-      return <span>CLAIMED</span>;
-    }
-    if (isLessThanPreviousMonth) {
-      return <span>CLAIMED NOW REVERSED IN {monthOf2B}</span>;
-    }
-  }
-
-  // Default fallback, if none of the above conditions met
-  return <span>{""}</span>;
-}
 
 export default function GSTReconciliation() {
   const [data2B, setData2B] = useState([]);
