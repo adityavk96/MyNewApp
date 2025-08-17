@@ -300,7 +300,7 @@ export default function GSTReconciliation() {
   },{Taxable_Value_2A:0,Taxable_Value_PR:0,IGST_2A:0,IGST_PR:0,CGST_2A:0,CGST_PR:0,SGST_2A:0,SGST_PR:0,Cess_2A:0,Cess_PR:0,Diff_Taxable:0,Diff_IGST:0,Diff_CGST:0,Diff_SGST:0,Diff_Cess:0});
 
   const downloadFormat=()=>{const ws=XLSX.utils.json_to_sheet([{GSTIN:"27ABCDE1234F1Z5",Supplier_Name:"Sample Supplier",Invoice_No:"INV001",Invoice_Date:"01-07-2024",Taxable_Value:1000,IGST:90,CGST:90,SGST:90,Cess:0}]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Format");XLSX.writeFile(wb,"gst_reco_format.xlsx");};
-  const downloadReport=()=>{const order=columns.map(c=>c.accessorKey||c.id);const data=table.getFilteredRowModel().rows.map(r=>{const row={};order.forEach(c=>row[c]=r.original[c]);return row;});const ws=XLSX.utils.json_to_sheet(data,{header:order});const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Reconciliation");XLSX.writeFile(wb,"gst_reconciliation_report.xlsx");};
+  const downloadReport=()=>{const order=columns.map(c=>c.accessorKey||c.id);const data=table.getFilteredRowModel().rows.map(r=>{const row={};order.forEach(c=>row[c]=r.original[c]);return row;});const ws=XLSX.utils.json_to_sheet(data,{header:order});const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Reconciliation");XLSX.writeFile(wb,"gst_2AReco_report.xlsx");};
 
   return (
     <div className="max-w-7xl mx-auto p-6">
