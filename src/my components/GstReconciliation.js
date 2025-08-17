@@ -275,14 +275,14 @@ export default function GSTReconciliation() {
         enableColumnFilter: true,
         filterFn: "includesSome",
         meta: { Filter: MultiSelectFilter },
+      },      
+      {
+        accessorKey: "Invoice_No_PR",
+        header: "Invoice No. (PR)",
       },
       {
         accessorKey: "Invoice_Date_2A",
         header: "Invoice Date (2A)",
-      },
-      {
-        accessorKey: "Invoice_No_PR",
-        header: "Invoice No. (PR)",
       },
       {
         accessorKey: "Invoice_Date_PR",
