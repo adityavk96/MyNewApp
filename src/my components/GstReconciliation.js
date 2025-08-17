@@ -14,14 +14,25 @@ const normalizeInvoiceNo = (invNo) => {
   if (!invNo) return "";
   let str = invNo.toString().toUpperCase();
 
-  // Remove the "PR" prefix and any following leading zeros
-  str = str.replace(/^PR0*/, "");
+  // Remove the 'HSE' and 'PR' prefixes followed by optional leading zeros
+  str = str.replace(/^(HSE|PR)0*/, "");
+
+  const fyPatterns = [
+    // Matches patterns like "22-23", "23-24", etc.
+    /\b\d{2}[-/]\d{2}\b/g,
+    // Matches patterns like "2023-2024" or "2021-22"
+    /\b20\d{2}[-/]20\d{2}\b/g,
+    /\b20\d{2}[-/]\d{2}\b/g,
+  ];
+
+  fyPatterns.forEach((pat) => {
+    str = str.replace(pat, "");
+  });
 
   // Remove all non-numeric and non-alphanumeric characters like 'a', 'G', '/', ' ', etc.
-  // This will handle cases like '2a G/008143' -> '2AG008143'
   str = str.replace(/[^A-Z0-9]/g, "");
 
-  // Remove all letters
+  // Remove all remaining letters
   str = str.replace(/[A-Z]/g, "");
 
   // Remove leading zeros from the remaining string, but keep one if it's the only character
