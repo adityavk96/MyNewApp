@@ -10,20 +10,16 @@ const animatedComponents = makeAnimated();
 const normalizeInvoiceNo = (invNo) => {
   if (!invNo) return "";
   let str = invNo.toString().toUpperCase();
-
   str = str.replace(/^(HSE|PR)0*/, "");
-
   const fyPatterns = [
     /\b\d{2}[-/]\d{2}\b/g,
     /\b20\d{2}[-/]20\d{2}\b/g,
     /\b20\d{2}[-/]\d{2}\b/g,
   ];
   fyPatterns.forEach((pat) => (str = str.replace(pat, "")));
-
   str = str.replace(/[^A-Z0-9]/g, "");
   str = str.replace(/[A-Z]/g, "");
   str = str.replace(/^0+(?=\d)/, "");
-
   return str.trim();
 };
 
@@ -38,7 +34,9 @@ const parseDDMMYYYY = (str) => {
     if (mm < 1 || mm > 12) return "";
     const d = new Date(yyyy, mm - 1, dd);
     if (!isNaN(d.getTime())) {
-      return `${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()}`;
+      return `${String(d.getDate()).padStart(2, "0")}-${String(
+        d.getMonth() + 1
+      ).padStart(2, "0")}-${d.getFullYear()}`;
     }
   }
   return "";
@@ -46,30 +44,31 @@ const parseDDMMYYYY = (str) => {
 
 const formatDate = (dateVal) => {
   if (!dateVal) return "";
-
   if (typeof dateVal === "number") {
     const excelEpoch = new Date(1900, 0, 1);
     const date = new Date(excelEpoch.getTime() + (dateVal - 2) * 86400000);
     if (!isNaN(date.getTime())) {
-      return `${String(date.getDate()).padStart(2,"0")}-${String(date.getMonth()+1).padStart(2,"0")}-${date.getFullYear()}`;
+      return `${String(date.getDate()).padStart(2, "0")}-${String(
+        date.getMonth() + 1
+      ).padStart(2, "0")}-${date.getFullYear()}`;
     }
   }
-
   if (dateVal instanceof Date) {
     if (isNaN(dateVal.getTime())) return "";
-    return `${String(dateVal.getDate()).padStart(2,"0")}-${String(dateVal.getMonth()+1).padStart(2,"0")}-${dateVal.getFullYear()}`;
+    return `${String(dateVal.getDate()).padStart(2, "0")}-${String(
+      dateVal.getMonth() + 1
+    ).padStart(2, "0")}-${dateVal.getFullYear()}`;
   }
-
   if (typeof dateVal === "string") {
     const parsed = parseDDMMYYYY(dateVal);
     if (parsed) return parsed;
   }
-
   const d = new Date(dateVal);
   if (!isNaN(d.getTime())) {
-    return `${String(d.getDate()).padStart(2,"0")}-${String(d.getMonth()+1).padStart(2,"0")}-${d.getFullYear()}`;
+    return `${String(d.getDate()).padStart(2, "0")}-${String(
+      d.getMonth() + 1
+    ).padStart(2, "0")}-${d.getFullYear()}`;
   }
-
   return dateVal;
 };
 
@@ -81,8 +80,8 @@ const fmt = (n) =>
 
 const createOptions = (values) =>
   values.filter((v) => v !== undefined && v !== null)
-        .sort()
-        .map((v) => ({ label: v === "" ? "(Blank)" : v, value: v }));
+    .sort()
+    .map((v) => ({ label: v === "" ? "(Blank)" : v, value: v }));
 
 function MultiSelectFilter({ column, table }) {
   const uniqueValues = useMemo(() => {
@@ -92,7 +91,6 @@ function MultiSelectFilter({ column, table }) {
   }, [column.id, table.options.data]);
 
   const values = column.getFilterValue() || [];
-
   return (
     <ReactSelect
       options={createOptions(uniqueValues)}
@@ -109,29 +107,38 @@ function MultiSelectFilter({ column, table }) {
   );
 }
 
+// -------------------- Component --------------------
+
 export default function GSTReconciliation() {
   const [data2A, setData2A] = useState([]);
   const [dataBooks, setDataBooks] = useState([]);
   const [reconciledData, setReconciledData] = useState([]);
   const [columnFilters, setColumnFilters] = useState([]);
 
+  // File status for uploads
+  const [file2AStatus, setFile2AStatus] = useState({ message: "", type: "", progress: 0 });
+  const [fileBooksStatus, setFileBooksStatus] = useState({ message: "", type: "", progress: 0 });
+
   const parseExcel = (buffer) => {
     const workbook = XLSX.read(buffer, { type: "array" });
-    return XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {
-      raw: false,
-      defval: "",
-    });
+    return XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { raw: false, defval: "" });
   };
 
-  const handleFileUpload = (e, setData) => {
+  // File upload with status
+  const handleFileUpload = (e, setData, setStatus) => {
     const file = e.target.files?.[0];
-    if (!file) return alert("No file selected");
+    if (!file) {
+      setStatus({ message: "❌ No file selected", type: "error", progress: 100 });
+      return;
+    }
+    setStatus({ message: `⏳ Uploading ${file.name}...`, type: "pending", progress: 40 });
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
         setData(parseExcel(event.target.result));
+        setStatus({ message: "✔ File processed successfully!", type: "success", progress: 100 });
       } catch {
-        alert("Failed to read Excel file");
+        setStatus({ message: "❌ Failed to process file", type: "error", progress: 100 });
       }
     };
     reader.readAsArrayBuffer(file);
@@ -156,9 +163,10 @@ export default function GSTReconciliation() {
       };
     });
 
+  // --- Reconciliation Status Logic ---
   const performReconciliation = (books, twoA) => {
     const map = new Map();
-
+    // Default from Books
     books.forEach((b) => {
       map.set(b.recoKey, {
         GSTIN: b.GSTIN || "",
@@ -181,6 +189,7 @@ export default function GSTReconciliation() {
       });
     });
 
+    // Merge 2A data
     twoA.forEach((a) => {
       const existing = map.get(a.recoKey);
       if (existing) {
@@ -195,9 +204,7 @@ export default function GSTReconciliation() {
 
         if (!existing.Invoice_No_PR) {
           existing.Status = "Not in Books";
-        } else if (!existing.Invoice_No_2A) {
-          existing.Status = "Not in 2A";
-        } else {
+        } else if (existing.Invoice_No_PR && existing.Invoice_No_2A) {
           const eq = (x, y) => Math.abs(toNum(x) - toNum(y)) < 0.01;
           existing.Status =
             eq(existing.Taxable_Value_2A, existing.Taxable_Value_PR) &&
@@ -246,32 +253,30 @@ export default function GSTReconciliation() {
       !filterValue?.length || filterValue.includes(row.getValue(columnId)),
   };
 
-  const columns = useMemo(
-    () => [
-      { accessorKey: "GSTIN", header: "GSTIN", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter } },
-      { accessorKey: "Supplier_Name", header: "Supplier Name", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter } },
-      { accessorKey: "Invoice_No_2A", header: "Invoice No. (2A)" },
-      { accessorKey: "Invoice_No_PR", header: "Invoice No. (PR)" },
-      { accessorKey: "Invoice_Date_2A", header: "Invoice Date (2A)" },
-      { accessorKey: "Invoice_Date_PR", header: "Invoice Date (PR)" },
-      { accessorKey: "Taxable_Value_2A", header: "Taxable Value (2A)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
-      { accessorKey: "Taxable_Value_PR", header: "Taxable Value (PR)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
-      { accessorKey: "IGST_2A", header: "IGST (2A)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
-      { accessorKey: "IGST_PR", header: "IGST (PR)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
-      { accessorKey: "CGST_2A", header: "CGST (2A)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
-      { accessorKey: "CGST_PR", header: "CGST (PR)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
-      { accessorKey: "SGST_2A", header: "SGST (2A)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
-      { accessorKey: "SGST_PR", header: "SGST (PR)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
-      { accessorKey: "Cess_2A", header: "Cess (2A)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
-      { accessorKey: "Cess_PR", header: "Cess (PR)", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
-      { accessorKey: "Diff_Taxable", header: "Diff Taxable", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
-      { accessorKey: "Diff_IGST", header: "Diff IGST", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
-      { accessorKey: "Diff_CGST", header: "Diff CGST", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
-      { accessorKey: "Diff_SGST", header: "Diff SGST", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
-      { accessorKey: "Diff_Cess", header: "Diff Cess", cell: ({ getValue }) => fmt(getValue()), meta: { isNumeric: true } },
-      { accessorKey: "Status", header: "Status", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter } },
-    ],[]
-  );
+  const columns = useMemo(() => [
+    { accessorKey: "GSTIN", header: "GSTIN", enableColumnFilter:true, filterFn:"includesSome", meta:{Filter:MultiSelectFilter} },
+    { accessorKey: "Supplier_Name", header: "Supplier Name", enableColumnFilter:true, filterFn:"includesSome", meta:{Filter:MultiSelectFilter} },
+    { accessorKey: "Invoice_No_2A", header: "Invoice No (2A)" },
+    { accessorKey: "Invoice_No_PR", header: "Invoice No (PR)" },
+    { accessorKey: "Invoice_Date_2A", header: "Invoice Date (2A)" },
+    { accessorKey: "Invoice_Date_PR", header: "Invoice Date (PR)" },
+    { accessorKey: "Taxable_Value_2A", header: "Taxable Value (2A)", cell: ({getValue}) => fmt(getValue()), meta:{isNumeric:true} },
+    { accessorKey: "Taxable_Value_PR", header: "Taxable Value (PR)", cell: ({getValue}) => fmt(getValue()), meta:{isNumeric:true} },
+    { accessorKey: "IGST_2A", header: "IGST (2A)", cell: ({getValue}) => fmt(getValue()), meta:{isNumeric:true} },
+    { accessorKey: "IGST_PR", header: "IGST (PR)", cell: ({getValue}) => fmt(getValue()), meta:{isNumeric:true} },
+    { accessorKey: "CGST_2A", header: "CGST (2A)", cell: ({getValue}) => fmt(getValue()), meta:{isNumeric:true} },
+    { accessorKey: "CGST_PR", header: "CGST (PR)", cell: ({getValue}) => fmt(getValue()), meta:{isNumeric:true} },
+    { accessorKey: "SGST_2A", header: "SGST (2A)", cell: ({getValue}) => fmt(getValue()), meta:{isNumeric:true} },
+    { accessorKey: "SGST_PR", header: "SGST (PR)", cell: ({getValue}) => fmt(getValue()), meta:{isNumeric:true} },
+    { accessorKey: "Cess_2A", header: "Cess (2A)", cell: ({getValue}) => fmt(getValue()), meta:{isNumeric:true} },
+    { accessorKey: "Cess_PR", header: "Cess (PR)", cell: ({getValue}) => fmt(getValue()), meta:{isNumeric:true} },
+    { accessorKey: "Diff_Taxable", header: "Diff Taxable", cell: ({getValue}) => fmt(getValue()), meta:{isNumeric:true} },
+    { accessorKey: "Diff_IGST", header: "Diff IGST", cell: ({getValue}) => fmt(getValue()), meta:{isNumeric:true} },
+    { accessorKey: "Diff_CGST", header: "Diff CGST", cell: ({getValue}) => fmt(getValue()), meta:{isNumeric:true} },
+    { accessorKey: "Diff_SGST", header: "Diff SGST", cell: ({getValue}) => fmt(getValue()), meta:{isNumeric:true} },
+    { accessorKey: "Diff_Cess", header: "Diff Cess", cell: ({getValue}) => fmt(getValue()), meta:{isNumeric:true} },
+    { accessorKey: "Status", header: "Status", enableColumnFilter:true, filterFn:"includesSome", meta:{Filter:MultiSelectFilter} },
+  ], []);
 
   const table = useReactTable({
     data: reconciledData,
@@ -283,55 +288,113 @@ export default function GSTReconciliation() {
     filterFns,
   });
 
-  const subtotal = table.getFilteredRowModel().rows.reduce((acc,row)=>{
-    const d=row.original;
-    acc.Taxable_Value_2A+=toNum(d.Taxable_Value_2A);
-    acc.Taxable_Value_PR+=toNum(d.Taxable_Value_PR);
-    acc.IGST_2A+=toNum(d.IGST_2A); acc.IGST_PR+=toNum(d.IGST_PR);
-    acc.CGST_2A+=toNum(d.CGST_2A); acc.CGST_PR+=toNum(d.CGST_PR);
-    acc.SGST_2A+=toNum(d.SGST_2A); acc.SGST_PR+=toNum(d.SGST_PR);
-    acc.Cess_2A+=toNum(d.Cess_2A); acc.Cess_PR+=toNum(d.Cess_PR);
-    acc.Diff_Taxable+=toNum(d.Diff_Taxable);
-    acc.Diff_IGST+=toNum(d.Diff_IGST);
-    acc.Diff_CGST+=toNum(d.Diff_CGST);
-    acc.Diff_SGST+=toNum(d.Diff_SGST);
-    acc.Diff_Cess+=toNum(d.Diff_Cess);
-    return acc;
-  },{Taxable_Value_2A:0,Taxable_Value_PR:0,IGST_2A:0,IGST_PR:0,CGST_2A:0,CGST_PR:0,SGST_2A:0,SGST_PR:0,Cess_2A:0,Cess_PR:0,Diff_Taxable:0,Diff_IGST:0,Diff_CGST:0,Diff_SGST:0,Diff_Cess:0});
-
-  const downloadFormat=()=>{const ws=XLSX.utils.json_to_sheet([{GSTIN:"27ABCDE1234F1Z5",Supplier_Name:"Sample Supplier",Invoice_No:"INV001",Invoice_Date:"01-07-2024",Taxable_Value:1000,IGST:90,CGST:90,SGST:90,Cess:0}]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Format");XLSX.writeFile(wb,"gst_reco_format.xlsx");};
-  const downloadReport=()=>{const order=columns.map(c=>c.accessorKey||c.id);const data=table.getFilteredRowModel().rows.map(r=>{const row={};order.forEach(c=>row[c]=r.original[c]);return row;});const ws=XLSX.utils.json_to_sheet(data,{header:order});const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Reconciliation");XLSX.writeFile(wb,"gst_2AReco_report.xlsx");};
+  // --- Upload Renderer ---
+  const renderUpload = (label, setter, setStatus, status) => (
+    <div className="flex flex-col items-center w-45">
+      <label className="cursor-pointer bg-blue-600 text-white px-3 py-1 rounded text-sm text-center w-full">
+        {label}
+        <input
+          type="file"
+          accept=".xlsx,.xls"
+          onChange={(e) => handleFileUpload(e, setter, setStatus)}
+          className="hidden"
+        />
+      </label>
+      {status.message && (
+        <div className="mt-1 w-full text-center">
+          <div
+            className={`text-xs mb-1 ${
+              status.type === "success"
+                ? "text-green-600"
+                : status.type === "error"
+                ? "text-red-600"
+                : "text-blue-600"
+            }`}
+          >
+            {status.message}
+          </div>
+          <div className="w-full bg-gray-200 h-1 rounded">
+            <div
+              className={`h-1 rounded transition-all duration-500 ${
+                status.type === "success"
+                  ? "bg-green-500"
+                  : status.type === "error"
+                  ? "bg-red-500"
+                  : "bg-blue-500"
+              }`}
+              style={{ width: `${status.progress}%` }}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="max-w-7xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-6 text-center">GST Reconciliation With 2A</h1>
-      <div className="mb-4 flex flex-wrap gap-4 items-center justify-center">
 
-        <label className="cursor-pointer bg-blue-600 text-white px-4 py-2 rounded">
-          Upload GSTR-2A
-          <input type="file" accept=".xlsx,.xls" onChange={(e)=>handleFileUpload(e,setData2A)} className="hidden"/>
-        </label>
+      {/* All buttons together */}
+      <div className="mb-4 flex flex-wrap gap-4 justify-center items-start">
+        {renderUpload("Upload GSTR-2A", setData2A, setFile2AStatus, file2AStatus)}
+        {renderUpload("Upload Books", setDataBooks, setFileBooksStatus, fileBooksStatus)}
 
-        <label className="cursor-pointer bg-blue-600 text-white px-4 py-2 rounded">
-          Upload Books
-          <input type="file" accept=".xlsx,.xls" onChange={(e)=>handleFileUpload(e,setDataBooks)} className="hidden"/>
-        </label>
+        <button
+          onClick={() => {
+            if (!data2A.length || !dataBooks.length)
+              return alert("Upload both files");
+            const processedBooks = processRawData(dataBooks, "Books");
+            const processed2A = processRawData(data2A, "2A");
+            setReconciledData(performReconciliation(processedBooks, processed2A));
+            setColumnFilters([]);
+            setFile2AStatus({ message: "", type: "", progress: 0 });
+            setFileBooksStatus({ message: "", type: "", progress: 0 });
+          }}
+          className="bg-green-600 text-white px-3 py-1 rounded text-sm"
+        >
+          Reconcile
+        </button>
 
-        <button onClick={()=>{
-          if(!data2A.length || !dataBooks.length) return alert("Upload both files");
-          const processedBooks=processRawData(dataBooks,"Books");
-          const processed2A=processRawData(data2A,"2A");
-          setReconciledData(performReconciliation(processedBooks,processed2A));
-          setColumnFilters([]);
-        }} className="bg-green-600 text-white px-4 py-2 rounded">Reconcile</button>
+        <button
+          onClick={()=>{
+            const ws=XLSX.utils.json_to_sheet([{GSTIN:"27ABCDE1234F1Z5",Supplier_Name:"Sample Supplier",Invoice_No:"INV001",Invoice_Date:"01-07-2024",Taxable_Value:1000,IGST:90,CGST:90,SGST:90,Cess:0}]);
+            const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"Format"); XLSX.writeFile(wb,"gst_reco_format.xlsx");
+          }}
+          className="bg-gray-600 text-white px-3 py-1 rounded text-sm"
+        >
+          Download Format
+        </button>
 
-        <button onClick={downloadFormat} className="bg-gray-600 text-white px-4 py-2 rounded">Download Format</button>
-        {reconciledData.length>0 && <>
-          <button onClick={downloadReport} className="bg-indigo-600 text-white px-4 py-2 rounded ml-2">Download Report</button>
-          <button onClick={()=>{setReconciledData([]);setData2A([]);setDataBooks([]);setColumnFilters([]);}} className="bg-gray-700 text-white px-4 py-2 rounded ml-2">Go Back</button>
-        </>}
+        {reconciledData.length>0 && (
+          <>
+            <button
+              onClick={()=>{
+                const order=columns.map(c=>c.accessorKey||c.id);
+                const data=table.getFilteredRowModel().rows.map(r=>{
+                  const row={}; order.forEach(c=>row[c]=r.original[c]); return row;
+                });
+                const ws=XLSX.utils.json_to_sheet(data,{header:order});
+                const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws,"Reconciliation");
+                XLSX.writeFile(wb,"gst_2AReco_report.xlsx");
+              }}
+              className="bg-indigo-600 text-white px-3 py-1 rounded text-sm"
+            >
+              Download Report
+            </button>
+            <button
+              onClick={()=>{
+                setReconciledData([]); setData2A([]); setDataBooks([]);
+                setColumnFilters([]); setFile2AStatus({message:"",type:"",progress:0}); setFileBooksStatus({message:"",type:"",progress:0});
+              }}
+              className="bg-gray-700 text-white px-3 py-1 rounded text-sm"
+            >
+              Go Back
+            </button>
+          </>
+        )}
       </div>
 
+      {/* Table */}
       {reconciledData.length>0 && (
         <div className="overflow-auto max-h-[600px] border rounded">
           <table className="border-collapse border border-gray-300 text-sm w-full">
@@ -340,32 +403,16 @@ export default function GSTReconciliation() {
                 <tr key={hg.id}>
                   {hg.headers.map((h)=>(
                     <th key={h.id} className="border px-2 py-1 text-left whitespace-nowrap">
-                      {h.isPlaceholder?null:<>{flexRender(h.column.columnDef.header,h.getContext())}
+                      {h.isPlaceholder?null:<>
+                        {flexRender(h.column.columnDef.header,h.getContext())}
                         {h.column.getCanFilter()&&h.column.columnDef.meta?.Filter
-                          ?<h.column.columnDef.meta.Filter column={h.column} table={table}/>:null}</>}
+                          ?<h.column.columnDef.meta.Filter column={h.column} table={table}/>
+                          :null}
+                      </>}
                     </th>
                   ))}
                 </tr>
               ))}
-              <tr className="font-bold bg-gray-200 sticky top-[68px] z-10">
-                <td colSpan={6} className="text-right border px-2 py-1">Subtotal</td>
-                <td className="border px-2 text-right">{fmt(subtotal.Taxable_Value_2A)}</td>
-                <td className="border px-2 text-right">{fmt(subtotal.Taxable_Value_PR)}</td>
-                <td className="border px-2 text-right">{fmt(subtotal.IGST_2A)}</td>
-                <td className="border px-2 text-right">{fmt(subtotal.IGST_PR)}</td>
-                <td className="border px-2 text-right">{fmt(subtotal.CGST_2A)}</td>
-                <td className="border px-2 text-right">{fmt(subtotal.CGST_PR)}</td>
-                <td className="border px-2 text-right">{fmt(subtotal.SGST_2A)}</td>
-                <td className="border px-2 text-right">{fmt(subtotal.SGST_PR)}</td>
-                <td className="border px-2 text-right">{fmt(subtotal.Cess_2A)}</td>
-                <td className="border px-2 text-right">{fmt(subtotal.Cess_PR)}</td>
-                <td className="border px-2 text-right">{fmt(subtotal.Diff_Taxable)}</td>
-                <td className="border px-2 text-right">{fmt(subtotal.Diff_IGST)}</td>
-                <td className="border px-2 text-right">{fmt(subtotal.Diff_CGST)}</td>
-                <td className="border px-2 text-right">{fmt(subtotal.Diff_SGST)}</td>
-                <td className="border px-2 text-right">{fmt(subtotal.Diff_Cess)}</td>
-                <td></td>
-              </tr>
             </thead>
             <tbody>
               {table.getRowModel().rows.map((row)=>(
