@@ -1,19 +1,34 @@
 import React, { useState, useMemo } from "react";
 import { useReactTable, flexRender } from "@tanstack/react-table";
 import { getCoreRowModel, getFilteredRowModel } from "@tanstack/table-core";
-import * as XLSX from "xlsx";
-import ReactSelect from "react-select";
+import * as XLSX from "xlsx"; // For reading Excel files
+//import ExcelJS from "exceljs"; // For Excel export with styling CHECK IF NEEDED
+//import { saveAs } from "file-saver"; // For triggering file downloads CHECK IF NEEDED
+import ReactSelect from "react-select"; // For multi-select dropdowns in filters
 import makeAnimated from "react-select/animated";
 
-const animatedComponents = makeAnimated();
+const animatedComponents = makeAnimated(); // Animated components for ReactSelect
 
 // -------------------- Helpers --------------------
 
-/**
- * Normalizes an invoice number by removing prefixes, fiscal year patterns, and non-digit characters.
- * @param {string | number} invNo - The invoice number to normalize.
- * @returns {string} The normalized invoice number containing only digits.
- */
+function groupByRecoKey(arr) {
+  const group = new Map();
+  arr.forEach((item) => {
+    const key = item.recoKey;
+    if (!group.has(key)) {
+      group.set(key, { ...item });
+    } else {
+      const existing = group.get(key);
+      existing.Taxable_Value += toNum(item.Taxable_Value);
+      existing.IGST += toNum(item.IGST);
+      existing.CGST += toNum(item.CGST);
+      existing.SGST += toNum(item.SGST);
+      existing.Cess += toNum(item.Cess);
+    }
+  });
+  return Array.from(group.values());
+}
+
 const normalizeInvoiceNo = (invNo) => {
   if (!invNo) return "";
   let str = invNo.toString().toUpperCase().trim();
@@ -31,11 +46,6 @@ const normalizeInvoiceNo = (invNo) => {
   return str;
 };
 
-/**
- * Parses a date string in DD/MM/YYYY format and returns it as DD-MM-YYYY.
- * @param {string} str - The date string to parse.
- * @returns {string} The formatted date string or an empty string if invalid.
- */
 const parseDDMMYYYY = (str) => {
   if (!str) return "";
   const match = str.match(/^(\d{1,2})[.\-/ ](\d{1,2})[.\-/ ](\d{2,4})$/);
@@ -55,14 +65,10 @@ const parseDDMMYYYY = (str) => {
   return "";
 };
 
-/**
- * Formats a given date value into DD-MM-YYYY format.
- * @param {any} dateVal - The date value to format.
- * @returns {string} The formatted date string or the original value if it can't be formatted.
- */
 const formatDate = (dateVal) => {
   if (!dateVal) return "";
   if (typeof dateVal === "number") {
+    // Excel date number to JS date
     const excelEpoch = new Date(1900, 0, 1);
     const date = new Date(excelEpoch.getTime() + (dateVal - 2) * 86400000);
     if (!isNaN(date.getTime())) {
@@ -75,7 +81,7 @@ const formatDate = (dateVal) => {
     if (isNaN(dateVal.getTime())) return "";
     return `${String(dateVal.getDate()).padStart(2, "0")}-${String(
       dateVal.getMonth() + 1
-    ).padStart(2, "0")}-${dateVal.getFullYear()}`;
+    )}-${dateVal.getFullYear()}`;
   }
   if (typeof dateVal === "string") {
     const parsed = parseDDMMYYYY(dateVal);
@@ -85,35 +91,18 @@ const formatDate = (dateVal) => {
   if (!isNaN(d.getTime())) {
     return `${String(d.getDate()).padStart(2, "0")}-${String(
       d.getMonth() + 1
-    ).padStart(2, "0")}-${d.getFullYear()}`;
+    )}-${d.getFullYear()}`;
   }
   return dateVal;
 };
 
-/**
- * Extracts a month and year from an invoice number string.
- * @param {string} invNo - The invoice number string.
- * @returns {string} The formatted month and year (e.g., "Jan-22").
- */
 const extractMonthFromInvoiceNo = (invNo) => {
   if (!invNo) return "";
   const months = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
+    "Jan","Feb","Mar","Apr","May","Jun",
+    "Jul","Aug","Sep","Oct","Nov","Dec",
   ];
-  let match = invNo.match(
-    /(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[-./]?(\d{2})/i
-  );
+  let match = invNo.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[-./]?(\d{2})/i);
   if (match)
     return `${match[1].charAt(0).toUpperCase() + match[1].slice(1).toLowerCase()}-${match[2]}`;
   match = invNo.match(/(\d{1,2})[-./](\d{2})/);
@@ -124,26 +113,15 @@ const extractMonthFromInvoiceNo = (invNo) => {
   return "";
 };
 
-/** Converts a value to a number, defaulting to 0 if not a valid number. */
 const toNum = (v) => (isNaN(parseFloat(v)) ? 0 : parseFloat(v));
 
-/** Formats a number to Indian currency locale with two decimal places. */
 const fmt = (n) =>
   typeof n === "number"
-    ? n.toLocaleString("en-IN", {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })
+    ? n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : n;
 
-/** Renders a table cell with a fallback value if the primary value is empty. */
 const renderWithFallback = ({ getValue }) => getValue() || "-";
 
-/**
- * Renders a numeric table cell.
- * Displays absolute values for all columns except "Diff" columns.
- * @param {object} cell - The cell context provided by React Table.
- */
 const renderNumericWithFallback = ({ getValue, column }) => {
   const value = getValue();
   const isDiffColumn = column.id.startsWith("Diff_");
@@ -151,14 +129,12 @@ const renderNumericWithFallback = ({ getValue, column }) => {
   return displayValue === 0 ? "-" : fmt(displayValue);
 };
 
-/** Creates an array of options for a ReactSelect component from a set of values. */
 const createOptions = (values) =>
   values
     .filter((v) => v !== undefined && v !== null)
     .sort()
     .map((v) => ({ label: v === "" ? "(Blank)" : v, value: v }));
 
-/** A custom filter component for multi-select dropdowns. */
 function MultiSelectFilter({ column, table }) {
   const uniqueValues = useMemo(() => {
     const u = new Set();
@@ -185,7 +161,6 @@ function MultiSelectFilter({ column, table }) {
   );
 }
 
-/** Converts a month-year string (e.g., "Jan-24") to a number for comparison. */
 const monthToNumber = (m) => {
   if (!m) return null;
   const months = {
@@ -198,7 +173,6 @@ const monthToNumber = (m) => {
   return year * 100 + months[mon];
 };
 
-/** Determines the 3B status based on the reconciliation status and months. */
 function getThreeBStatus(status, month, prevMonth) {
   if (!status || !month || !prevMonth) return "";
   const mNum = monthToNumber(month);
@@ -216,24 +190,19 @@ function getThreeBStatus(status, month, prevMonth) {
   return "";
 }
 
-/** Calculates the previous month in "Mon-YY" format. */
 function getPreviousMonth() {
   const now = new Date();
   now.setDate(1);
   now.setMonth(now.getMonth() - 1);
   const months = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    "Jan","Feb","Mar","Apr","May","Jun",
+    "Jul","Aug","Sep","Oct","Nov","Dec",
   ];
   const mm = months[now.getMonth()];
   const yy = String(now.getFullYear()).slice(-2);
   return `${mm}-${yy}`;
 }
 
-/**
- * Calculates the financial year from a given date string in DD-MM-YYYY format.
- * @param {string} dateString The date string in DD-MM-YYYY format.
- * @returns {string} The financial year string (e.g., "FY2023-24"), or empty string if invalid.
- */
 const getFYFromDate = (dateString) => {
   if (!dateString) return "";
   const parts = dateString.split("-");
@@ -242,7 +211,8 @@ const getFYFromDate = (dateString) => {
   const mm = parseInt(parts[1], 10) - 1;
   const yyyy = parseInt(parts[2], 10);
   if (
-    isNaN(dd) || isNaN(mm) || isNaN(yyyy) || dd < 1 || dd > 31 || mm < 0 || mm > 11 || yyyy < 1900
+    isNaN(dd) || isNaN(mm) || isNaN(yyyy) ||
+    dd < 1 || dd > 31 || mm < 0 || mm > 11 || yyyy < 1900
   ) {
     return "";
   }
@@ -260,61 +230,64 @@ const getFYFromDate = (dateString) => {
 // -------------------- Main Component --------------------
 
 export default function GSTReconciliation() {
+  // Data states
   const [data2B, setData2B] = useState([]);
   const [dataBooks, setDataBooks] = useState([]);
   const [reconciledData, setReconciledData] = useState([]);
   const [columnFilters, setColumnFilters] = useState([]);
-  const [file2BStatus, setFile2BStatus] = useState({
-    message: "",
-    type: "",
-    progress: 0,
-  });
-  const [fileBooksStatus, setFileBooksStatus] = useState({
-    message: "",
-    type: "",
-    progress: 0,
-  });
+  const [file2BStatus, setFile2BStatus] = useState({ message: "", type: "", progress: 0 });
+  const [fileBooksStatus, setFileBooksStatus] = useState({ message: "", type: "", progress: 0 });
 
+  // Summary data: total counts and sums for Uploaded Data Summary table
+  const summaryData = useMemo(() => {
+    const calculateSums = (data) => {
+      return data.reduce(
+        (acc, item) => {
+          acc.docCount += 1;
+          acc.taxableValue += toNum(item.Taxable_Value);
+          acc.igst += toNum(item.IGST);
+          acc.cgst += toNum(item.CGST);
+          acc.sgst += toNum(item.SGST);
+          acc.cess += toNum(item.Cess);
+          return acc;
+        },
+        { docCount: 0, taxableValue: 0, igst: 0, cgst: 0, sgst: 0, cess: 0 }
+      );
+    };
+    return {
+      twoB: calculateSums(data2B),
+      books: calculateSums(dataBooks),
+    };
+  }, [data2B, dataBooks]);
+
+  // Excel parsing utility
   const parseExcel = (buf) => {
     const wb = XLSX.read(buf, { type: "array" });
-    return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {
-      raw: false,
-      defval: "",
-    });
+    return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: false, defval: "" });
   };
 
+  // File upload handler
   const handleFileUpload = (e, setData, setStatus) => {
     const file = e.target.files?.[0];
     if (!file) {
       setStatus({ message: "❌ No file selected", type: "error", progress: 100 });
       return;
     }
-    setStatus({
-      message: `⏳ Processing ${file.name}...`,
-      type: "pending",
-      progress: 50,
-    });
+    setStatus({ message: `⏳ Processing ${file.name}...`, type: "pending", progress: 50 });
 
     const r = new FileReader();
     r.onload = (ev) => {
       try {
         setData(parseExcel(ev.target.result));
-        setStatus({
-          message: "✔ File processed successfully!",
-          type: "success",
-          progress: 100,
-        });
+        setStatus({ message: "✔ File processed successfully!", type: "success", progress: 100 });
       } catch {
-        setStatus({
-          message: "❌ Failed to process file",
-          type: "error",
-          progress: 100,
-        });
+        setStatus({ message: "❌ Failed to process file", type: "error", progress: 100 });
       }
     };
     r.readAsArrayBuffer(file);
   };
 
+  // Processing raw data for reconciliation
   const processRawData = (data, source) =>
     data.map((item) => {
       let originalDate = item.Invoice_Date || item.PR_Date || "";
@@ -329,8 +302,9 @@ export default function GSTReconciliation() {
 
       return {
         ...item,
-        // Creating a unique key by combining GSTIN, normalized invoice number, and fiscal year
-        recoKey: `${(item.GSTIN || "").toString().trim().toUpperCase()}__${normalizeInvoiceNo(item.Invoice_No || item.PR_No)}__${fy}`,
+        recoKey: `${(item.GSTIN || "").toString().trim().toUpperCase()}__${normalizeInvoiceNo(
+          item.Invoice_No || item.PR_No
+        )}__${fy}`,
         Taxable_Value: toNum(item.Taxable_Value),
         IGST: toNum(item.IGST),
         CGST: toNum(item.CGST),
@@ -347,6 +321,7 @@ export default function GSTReconciliation() {
       };
     });
 
+  // Perform reconciliation logic
   const performReconciliation = (books, twoB) => {
     const map = new Map();
     books.forEach((b) => {
@@ -386,14 +361,11 @@ export default function GSTReconciliation() {
         existing.CGST_2B = a.CGST || 0;
         existing.SGST_2B = a.SGST || 0;
         existing.Cess_2B = a.Cess || 0;
-        
-        // --- START: Supplier Name Condition Change ---
-        // If GSTIN is not available in the PR (existing) data, take the supplier name from 2B (a).
-        // Otherwise, keep the supplier name from PR.
+
+        // Condition: If GSTIN is empty in PR, take Supplier name from 2B
         if (existing.GSTIN === "") {
-            existing.Supplier_Name = a.Supplier_Name || existing.Supplier_Name;
+          existing.Supplier_Name = a.Supplier_Name || existing.Supplier_Name;
         }
-        // --- END: Supplier Name Condition Change ---
 
         existing.Invoice_Month_2B = a.Invoice_Month_2B || "";
         existing.Invoice_FY_2B = a.Invoice_FY_2B || "";
@@ -454,44 +426,176 @@ export default function GSTReconciliation() {
     }));
   };
 
+  // Filtering function for multi-select
   const filterFns = {
     includesSome: (row, colId, filterVal) =>
       !filterVal?.length || filterVal.includes(row.getValue(colId)),
   };
 
+  // Define columns for the React Table
   const columns = useMemo(
     () => [
-      { accessorKey: "Invoice_FY_2B", header: "FY (2B)", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter }, cell: renderWithFallback },
-      { accessorKey: "Invoice_FY_PR", header: "FY (PR)", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter }, cell: renderWithFallback },
-      { accessorKey: "Invoice_Month_2B", header: "Month (2B)", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter }, cell: renderWithFallback },
-      { accessorKey: "Invoice_Month_PR", header: "Month (PR)", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter }, cell: renderWithFallback },
-      { accessorKey: "GSTIN", header: "GSTIN", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter }, cell: renderWithFallback },
-      { accessorKey: "Supplier_Name", header: "Supplier Name", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter }, cell: renderWithFallback },
+      {
+        accessorKey: "Invoice_FY_2B",
+        header: "FY (2B)",
+        enableColumnFilter: true,
+        filterFn: "includesSome",
+        meta: { Filter: MultiSelectFilter },
+        cell: renderWithFallback,
+      },
+      {
+        accessorKey: "Invoice_FY_PR",
+        header: "FY (PR)",
+        enableColumnFilter: true,
+        filterFn: "includesSome",
+        meta: { Filter: MultiSelectFilter },
+        cell: renderWithFallback,
+      },
+      {
+        accessorKey: "Invoice_Month_2B",
+        header: "Month (2B)",
+        enableColumnFilter: true,
+        filterFn: "includesSome",
+        meta: { Filter: MultiSelectFilter },
+        cell: renderWithFallback,
+      },
+      {
+        accessorKey: "Invoice_Month_PR",
+        header: "Month (PR)",
+        enableColumnFilter: true,
+        filterFn: "includesSome",
+        meta: { Filter: MultiSelectFilter },
+        cell: renderWithFallback,
+      },
+      {
+        accessorKey: "GSTIN",
+        header: "GSTIN",
+        enableColumnFilter: true,
+        filterFn: "includesSome",
+        meta: { Filter: MultiSelectFilter },
+        cell: renderWithFallback,
+      },
+      {
+        accessorKey: "Supplier_Name",
+        header: "Supplier Name",
+        enableColumnFilter: true,
+        filterFn: "includesSome",
+        meta: { Filter: MultiSelectFilter },
+        cell: renderWithFallback,
+      },
       { accessorKey: "Invoice_No_2B", header: "Invoice No. (2B)", cell: renderWithFallback },
       { accessorKey: "Invoice_No_PR", header: "Invoice No. (PR)", cell: renderWithFallback },
       { accessorKey: "Invoice_Date_2B", header: "Invoice Date (2B)", cell: renderWithFallback },
       { accessorKey: "Invoice_Date_PR", header: "Invoice Date (PR)", cell: renderWithFallback },
-      { accessorKey: "Taxable_Value_2B", header: "Taxable Value (2B)", cell: renderNumericWithFallback, meta: { isNumeric: true } },
-      { accessorKey: "Taxable_Value_PR", header: "Taxable Value (PR)", cell: renderNumericWithFallback, meta: { isNumeric: true } },
-      { accessorKey: "IGST_2B", header: "IGST (2B)", cell: renderNumericWithFallback, meta: { isNumeric: true } },
-      { accessorKey: "IGST_PR", header: "IGST (PR)", cell: renderNumericWithFallback, meta: { isNumeric: true } },
-      { accessorKey: "CGST_2B", header: "CGST (2B)", cell: renderNumericWithFallback, meta: { isNumeric: true } },
-      { accessorKey: "CGST_PR", header: "CGST (PR)", cell: renderNumericWithFallback, meta: { isNumeric: true } },
-      { accessorKey: "SGST_2B", header: "SGST (2B)", cell: renderNumericWithFallback, meta: { isNumeric: true } },
-      { accessorKey: "SGST_PR", header: "SGST (PR)", cell: renderNumericWithFallback, meta: { isNumeric: true } },
-      { accessorKey: "Cess_2B", header: "Cess (2B)", cell: renderNumericWithFallback, meta: { isNumeric: true } },
-      { accessorKey: "Cess_PR", header: "Cess (PR)", cell: renderNumericWithFallback, meta: { isNumeric: true } },
-      { accessorKey: "Diff_Taxable", header: "Diff Taxable", cell: renderNumericWithFallback, meta: { isNumeric: true } },
-      { accessorKey: "Diff_IGST", header: "Diff IGST", cell: renderNumericWithFallback, meta: { isNumeric: true } },
-      { accessorKey: "Diff_CGST", header: "Diff CGST", cell: renderNumericWithFallback, meta: { isNumeric: true } },
-      { accessorKey: "Diff_SGST", header: "Diff SGST", cell: renderNumericWithFallback, meta: { isNumeric: true } },
-      { accessorKey: "Diff_Cess", header: "Diff Cess", cell: renderNumericWithFallback, meta: { isNumeric: true } },
-      { accessorKey: "Status", header: "Status", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter } },
-      { accessorKey: "ThreeB_Status", header: "3B Status", enableColumnFilter: true, filterFn: "includesSome", meta: { Filter: MultiSelectFilter } },
+      {
+        accessorKey: "Taxable_Value_2B",
+        header: "Taxable Value (2B)",
+        cell: renderNumericWithFallback,
+        meta: { isNumeric: true },
+      },
+      {
+        accessorKey: "Taxable_Value_PR",
+        header: "Taxable Value (PR)",
+        cell: renderNumericWithFallback,
+        meta: { isNumeric: true },
+      },
+      {
+        accessorKey: "IGST_2B",
+        header: "IGST (2B)",
+        cell: renderNumericWithFallback,
+        meta: { isNumeric: true },
+      },
+      {
+        accessorKey: "IGST_PR",
+        header: "IGST (PR)",
+        cell: renderNumericWithFallback,
+        meta: { isNumeric: true },
+      },
+      {
+        accessorKey: "CGST_2B",
+        header: "CGST (2B)",
+        cell: renderNumericWithFallback,
+        meta: { isNumeric: true },
+      },
+      {
+        accessorKey: "CGST_PR",
+        header: "CGST (PR)",
+        cell: renderNumericWithFallback,
+        meta: { isNumeric: true },
+      },
+      {
+        accessorKey: "SGST_2B",
+        header: "SGST (2B)",
+        cell: renderNumericWithFallback,
+        meta: { isNumeric: true },
+      },
+      {
+        accessorKey: "SGST_PR",
+        header: "SGST (PR)",
+        cell: renderNumericWithFallback,
+        meta: { isNumeric: true },
+      },
+      {
+        accessorKey: "Cess_2B",
+        header: "Cess (2B)",
+        cell: renderNumericWithFallback,
+        meta: { isNumeric: true },
+      },
+      {
+        accessorKey: "Cess_PR",
+        header: "Cess (PR)",
+        cell: renderNumericWithFallback,
+        meta: { isNumeric: true },
+      },
+      {
+        accessorKey: "Diff_Taxable",
+        header: "Diff Taxable",
+        cell: renderNumericWithFallback,
+        meta: { isNumeric: true },
+      },
+      {
+        accessorKey: "Diff_IGST",
+        header: "Diff IGST",
+        cell: renderNumericWithFallback,
+        meta: { isNumeric: true },
+      },
+      {
+        accessorKey: "Diff_CGST",
+        header: "Diff CGST",
+        cell: renderNumericWithFallback,
+        meta: { isNumeric: true },
+      },
+      {
+        accessorKey: "Diff_SGST",
+        header: "Diff SGST",
+        cell: renderNumericWithFallback,
+        meta: { isNumeric: true },
+      },
+      {
+        accessorKey: "Diff_Cess",
+        header: "Diff Cess",
+        cell: renderNumericWithFallback,
+        meta: { isNumeric: true },
+      },
+      {
+        accessorKey: "Status",
+        header: "Status",
+        enableColumnFilter: true,
+        filterFn: "includesSome",
+        meta: { Filter: MultiSelectFilter },
+      },
+      {
+        accessorKey: "ThreeB_Status",
+        header: "3B Status",
+        enableColumnFilter: true,
+        filterFn: "includesSome",
+        meta: { Filter: MultiSelectFilter },
+      },
     ],
     []
   );
 
+  // Setup react-table instance
   const table = useReactTable({
     data: reconciledData,
     columns,
@@ -502,10 +606,14 @@ export default function GSTReconciliation() {
     filterFns,
   });
 
-  const calculateSubtotal = (accessorKey) => {
-    return table.getFilteredRowModel().rows.reduce((sum, row) => sum + toNum(row.original[accessorKey]), 0);
-  };
+  // Helper: total sum for numeric columns in filtered rows
+  const calculateSubtotal = (accessorKey) =>
+    table.getFilteredRowModel().rows.reduce(
+      (sum, row) => sum + toNum(row.original[accessorKey]),
+      0
+    );
 
+  // Upload UI for files
   const renderUpload = (label, setter, setStatus, status) => (
     <div className="flex flex-col items-center">
       <label className="cursor-pointer bg-blue-600 text-white px-3 py-1 rounded text-sm">
@@ -547,41 +655,59 @@ export default function GSTReconciliation() {
     </div>
   );
 
-  // Memoized calculation for the summary table data
-  const summaryData = useMemo(() => {
-    const calculateSums = (data) => {
-      return data.reduce(
-        (acc, item) => {
-          acc.docCount += 1;
-          acc.taxableValue += toNum(item.Taxable_Value);
-          acc.igst += toNum(item.IGST);
-          acc.cgst += toNum(item.CGST);
-          acc.sgst += toNum(item.SGST);
-          acc.cess += toNum(item.Cess);
-          return acc;
-        },
-        {
-          docCount: 0,
-          taxableValue: 0,
-          igst: 0,
-          cgst: 0,
-          sgst: 0,
-          cess: 0,
-        }
-      );
-    };
+  // ----------------- Download Report function WITH STYLING & AUTOFIT ------------
+  const downloadReport = (columns, table) => {
+    const order = columns.map((c) => c.accessorKey || c.id);
+    const data = table.getFilteredRowModel().rows.map((r) => {
+      const row = {};
+      order.forEach((c) => {
+        row[c] = r.original[c];
+      });
+      return row;
+    });
 
-    return {
-      twoB: calculateSums(data2B),
-      books: calculateSums(dataBooks),
-    };
-  }, [data2B, dataBooks]);
+    const ws = XLSX.utils.json_to_sheet(data, { header: order });
+    const range = XLSX.utils.decode_range(ws["!ref"]);
+    const headerRow = range.s.r;
+
+    // Color headers based on text content
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cellRef = XLSX.utils.encode_cell({ r: headerRow, c });
+      const cell = ws[cellRef];
+      if (!cell || !cell.v) continue;
+      const text = cell.v.toString().toUpperCase();
+
+      let fillColor = "FFFFFF"; // default white
+      if (text.includes("(2B)")) fillColor = "FF0000"; // Red
+      else if (text.includes("(PR)")) fillColor = "0000FF"; // Blue
+      else if (text.includes("DIFF")) fillColor = "008000"; // Green
+      else if (text.includes("STATUS")) fillColor = "FFFF00"; // Yellow
+
+      cell.s = {
+        fill: { patternType: "solid", fgColor: { rgb: fillColor } },
+        font: { bold: true, color: { rgb: fillColor === "FFFF00" ? "000000" : "FFFFFF" } },
+      };
+    }
+
+    // Auto-fit columns by max data length + padding
+    const colWidths = order.map((col) => {
+      const maxLen = Math.max(
+        col?.length || 10,
+        ...data.map((row) => (row[col] ? row[col].toString().length : 0))
+      );
+      return { wch: maxLen + 2 };
+    });
+    ws["!cols"] = colWidths;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Reconciliation");
+    XLSX.writeFile(wb, "gst_2BReco_report.xlsx");
+  };
+  // ---------------------------------------------------------------------------
 
   return (
     <div className="max-w-7xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6 text-center">
-        GST Reconciliation With 2B
-      </h1>
+      <h1 className="text-2xl font-bold mb-6 text-center">GST Reconciliation With 2B</h1>
 
       <div className="mb-6 flex flex-wrap gap-4 justify-center items-start">
         {reconciledData.length === 0 && (
@@ -597,12 +723,9 @@ export default function GSTReconciliation() {
               alert("Upload both files");
               return;
             }
-            setReconciledData(
-              performReconciliation(
-                processRawData(dataBooks, "Books"),
-                processRawData(data2B, "2B")
-              )
-            );
+            const booksProcessed = groupByRecoKey(processRawData(dataBooks, "Books"));
+            const twoBProcessed = groupByRecoKey(processRawData(data2B, "2B"));
+            setReconciledData(performReconciliation(booksProcessed, twoBProcessed));
             setColumnFilters([]);
             setFile2BStatus({ message: "", type: "", progress: 0 });
             setFileBooksStatus({ message: "", type: "", progress: 0 });
@@ -615,15 +738,30 @@ export default function GSTReconciliation() {
         <button
           onClick={() => {
             const headers = [
-              "MONTH", "GSTIN", "Supplier_Name", "Invoice_No", "Invoice_Date",
-              "Taxable_Value", "IGST", "CGST", "SGST", "Cess",
+              "MONTH",
+              "GSTIN",
+              "Supplier_Name",
+              "Invoice_No",
+              "Invoice_Date",
+              "Taxable_Value",
+              "IGST",
+              "CGST",
+              "SGST",
+              "Cess",
             ];
             const ws = XLSX.utils.json_to_sheet(
               [
                 {
-                  MONTH: "JUL-24", GSTIN: "27ABCDE1234F1Z5", Supplier_Name: "Sample Supplier",
-                  Invoice_No: "INV001", Invoice_Date: "01-07-2024", Taxable_Value: 1000,
-                  IGST: 90, CGST: 90, SGST: 90, Cess: 0,
+                  MONTH: "JUL-24",
+                  GSTIN: "27ABCDE1234F1Z5",
+                  Supplier_Name: "Sample Supplier",
+                  Invoice_No: "INV001",
+                  Invoice_Date: "01-07-2024",
+                  Taxable_Value: 1000,
+                  IGST: 90,
+                  CGST: 90,
+                  SGST: 90,
+                  Cess: 0,
                 },
               ],
               { header: headers }
@@ -640,24 +778,12 @@ export default function GSTReconciliation() {
         {reconciledData.length > 0 && (
           <>
             <button
-              onClick={() => {
-                const order = columns.map((c) => c.accessorKey || c.id);
-                const data = table.getFilteredRowModel().rows.map((r) => {
-                  const row = {};
-                  order.forEach((c) => {
-                    row[c] = r.original[c];
-                  });
-                  return row;
-                });
-                const ws = XLSX.utils.json_to_sheet(data, { header: order });
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, "Reconciliation");
-                XLSX.writeFile(wb, "gst_2BReco_report.xlsx");
-              }}
+              onClick={() => downloadReport(columns, table)}
               className="bg-indigo-600 text-white px-3 py-1 rounded text-sm"
             >
               Download Report
             </button>
+
             <button
               onClick={() => {
                 setReconciledData([]);
@@ -667,7 +793,7 @@ export default function GSTReconciliation() {
                 setFile2BStatus({ message: "", type: "", progress: 0 });
                 setFileBooksStatus({ message: "", type: "", progress: 0 });
               }}
-              className="bg-gray-700 text-white px-3 py-1 rounded text-sm"
+              className="bg-gray-700 text-white px-3 py-1 rounded text-sm ml-2"
             >
               Go Back
             </button>
@@ -675,6 +801,7 @@ export default function GSTReconciliation() {
         )}
       </div>
 
+      {/* Uploaded Data Summary Table */}
       {reconciledData.length === 0 && (data2B.length > 0 || dataBooks.length > 0) && (
         <>
           <h2 className="text-xl font-semibold mb-3">Uploaded Data Summary</h2>
@@ -716,15 +843,10 @@ export default function GSTReconciliation() {
         </>
       )}
 
+      {/* Main reconciliation result table */}
       {reconciledData.length > 0 && (
-        <div
-          className="overflow-auto max-h-[600px] border rounded"
-          style={{ width: "100%", maxWidth: "100vw" }}
-        >
-          <table
-            className="border-collapse border border-gray-300 text-sm table-auto"
-            style={{ width: "100%", tableLayout: "auto" }}
-          >
+        <div className="overflow-auto max-h-[600px] border rounded" style={{ width: "100%", maxWidth: "100vw" }}>
+          <table className="border-collapse border border-gray-300 text-sm table-auto" style={{ width: "100%", tableLayout: "auto" }}>
             <thead className="bg-gray-100 sticky top-0 z-10">
               {table.getHeaderGroups().map((hg) => (
                 <tr key={hg.id}>
@@ -732,34 +854,35 @@ export default function GSTReconciliation() {
                     <th
                       key={h.id}
                       className="border border-gray-300 px-2 py-1 text-left whitespace-nowrap"
+                      style={{
+                        backgroundColor:
+                          h.column.columnDef.header.toString().includes("(2B)")
+                            ? "#ffcccc"
+                            : h.column.columnDef.header.toString().includes("(PR)")
+                            ? "#cce0ff"
+                            : h.column.columnDef.header.toString().toLowerCase().includes("diff")
+                            ? "#ccffcc"
+                            : h.column.columnDef.header.toString().toLowerCase().includes("status")
+                            ? "#ffffcc"
+                            : "",
+                        fontWeight: "bold",
+                      }}
                     >
-                      {h.isPlaceholder ? null : (
-                        <>
-                          {flexRender(h.column.columnDef.header, h.getContext())}
-                          {h.column.getCanFilter() &&
-                          h.column.columnDef.meta?.Filter ? (
-                            <h.column.columnDef.meta.Filter
-                              column={h.column}
-                              table={table}
-                            />
-                          ) : null}
-                        </>
-                      )}
+                      {!h.isPlaceholder && flexRender(h.column.columnDef.header, h.getContext())}
+                      {h.column.getCanFilter() && h.column.columnDef.meta?.Filter ? (
+                        <h.column.columnDef.meta.Filter column={h.column} table={table} />
+                      ) : null}
                     </th>
                   ))}
                 </tr>
               ))}
               <tr>
-                {table.getFlatHeaders().map((header, index) => (
+                {table.getFlatHeaders().map((header) => (
                   <th
                     key={header.id}
                     className="border border-gray-300 px-2 py-1 text-left whitespace-nowrap bg-gray-200 font-semibold"
                   >
-                    {header.column.columnDef.meta?.isNumeric ? (
-                      `${fmt(calculateSubtotal(header.column.id))}`
-                    ) : (
-                      ""
-                    )}
+                    {header.column.columnDef.meta?.isNumeric ? `${fmt(calculateSubtotal(header.column.id))}` : ""}
                   </th>
                 ))}
               </tr>
@@ -784,9 +907,7 @@ export default function GSTReconciliation() {
                     <td
                       key={cell.id}
                       className={`border px-2 py-1 ${
-                        cell.column.columnDef.meta?.isNumeric
-                          ? "text-right"
-                          : "text-left"
+                        cell.column.columnDef.meta?.isNumeric ? "text-right" : "text-left"
                       } whitespace-nowrap`}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
