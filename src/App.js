@@ -5,10 +5,8 @@ import Main from './my components/main'; // This will be our Home page
 import Services from './my components/Services'; // Import the new Services page
 import SideMenu from './my components/SideMenu';
 import Login from './my components/login';
-import GstReconciliation from './my components/GstReconciliation';
+import GstReco from './my components/GstReco';
 import './App.css';
-import GstReco2B from './my components/GstReco'; // Import the GSTR 2B component
-
 
 function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -40,8 +38,8 @@ function App() {
           <Route path="/" element={<Main />} />
           <Route path="/services" element={<Services />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/gst-reconciliation" element={<GstReconciliation />} />
-          <Route path="/gst-reco" element={<GstReco2B />} />
+          <Route path="/gst-reco" element={<GstReco />} />
+          {/*<Route path="/gst-reco" element={<GstReco2B />} />*/}
           {/* You can add an About page route here later */}
           {/* <Route path="/about" element={<About />} /> */}
         </Routes>
