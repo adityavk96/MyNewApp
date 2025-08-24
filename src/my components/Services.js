@@ -5,7 +5,7 @@ import {  FileText } from "lucide-react";
 const Services = () => {
   const servicesList = [
     { name: "GSTR Reco 2A OR 2B", icon: FileText, link: "/gst-reco" },
-    { name: "GSTR Reco", icon: FileText, link: "/gst-reco" },
+    { name: "GSTR Reco", icon: FileText, link: "/gst" },
     { name: "GST Filing", icon: FileText, link: "/gst-filing" },
     /* { name: "Web Development", icon: Code, link: "/web-development" },
     { name: "Mobile App Development", icon: Smartphone, link: "/mobile-app-development" },
