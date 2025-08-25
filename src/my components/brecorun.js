@@ -1,5 +1,37 @@
 // -------------------- Helper Functions --------------------
 
+// Converts any date value (Excel serial, string, JS Date) to MMM-YY format
+const toMonthYear = (value) => {
+    let dateObj;
+    if (typeof value === "number") {
+        // Excel serial date: 1 Jan 1900 = 1
+        dateObj = new Date(1900, 0, value - 1);
+    } else if (typeof value === "string") {
+        // If it's already MMM-YY, return as is
+        const mmmMatch = value.match(/^([A-Za-z]{3})[-/](\d{2,4})$/);
+        if (mmmMatch) {
+            return mmmMatch[1].charAt(0).toUpperCase() + mmmMatch[1].slice(1,3).toLowerCase() + '-' + mmmMatch[2].slice(-2);
+        }
+        // Try DD-MM-YYYY style
+        const parts = value.match(/^(\d{1,2})-(\d{1,2})-(\d{2,4})$/);
+        if (parts) {
+            let mm = parseInt(parts[2]);
+            let yyyy = parseInt(parts);
+            if (yyyy < 100) yyyy += 2000;
+            dateObj = new Date(yyyy, mm - 1, 1);
+        } else {
+            dateObj = new Date(value);
+        }
+    } else if (value instanceof Date) {
+        dateObj = value;
+    }
+    if (!dateObj || isNaN(dateObj.getTime())) return "";
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const mm = months[dateObj.getMonth()];
+    const yy = String(dateObj.getFullYear()).slice(-2);
+    return `${mm}-${yy}`;
+};
+
 // Groups data by recoKey aggregating numeric values
 function groupByRecoKey(arr) {
   const group = new Map();
@@ -141,7 +173,7 @@ export const reconcileData = (gstrData, booksData) => {
     const matchedBook = booksMap.get(gst.recoKey);
     const result = {
       Invoice_FY_2B: gst.Invoice_FY,
-      Invoice_Month_2B: gst.MONTH,
+      Invoice_Month_2B: toMonthYear(gst.MONTH), // <-- HIGHLIGHTED CHANGE
       GSTIN: gst.GSTIN,
       Supplier_Name: gst.Supplier_Name,
       Invoice_No_2B: gst.Invoice_No,
@@ -161,7 +193,7 @@ export const reconcileData = (gstrData, booksData) => {
       const diffCess = gst.Cess - matchedBook.Cess;
 
       result.Invoice_FY_PR = matchedBook.Invoice_FY;
-      result.Invoice_Month_PR = matchedBook.MONTH;
+      result.Invoice_Month_PR = toMonthYear(matchedBook.MONTH); // <-- HIGHLIGHTED CHANGE
       result.Invoice_No_PR = matchedBook.Invoice_No;
       result.Invoice_Date_PR = matchedBook.Invoice_Date;
       result.Taxable_Value_PR = matchedBook.Taxable_Value;
@@ -222,7 +254,8 @@ export const reconcileData = (gstrData, booksData) => {
       SGST_2B: 0,
       Cess_2B: 0,
       Invoice_FY_PR: book.Invoice_FY,
-      Invoice_Month_PR: book.MONTH,
+      Invoice_Month_PR: toMonthYear(book.MONTH), // <-- HIGHLIGHTED CHANGE
+
       Invoice_No_PR: book.Invoice_No,
       Invoice_Date_PR: book.Invoice_Date,
       Taxable_Value_PR: book.Taxable_Value,

@@ -2,21 +2,21 @@ import React, { useState } from 'react';
 import * as XLSX from 'xlsx-js-style';
 import { reconcileData } from './brecorun';
 
-// --- Indian Currency Formatting Function ---
 const formatIndianCurrency = (amount) => {
     if (amount === null || amount === undefined || isNaN(amount)) {
         return '0.00';
     }
-
-    const [integerPart, decimalPart] = parseFloat(amount).toFixed(2).split('.');
-
+    // Highlighted addition: handle negative values up front
+    const isNegative = parseFloat(amount) < 0; // <-- HIGHLIGHTED
+    let absAmount = Math.abs(parseFloat(amount)); // <-- HIGHLIGHTED
+    // Use absAmount for formatting
+    const [integerPart, decimalPart] = absAmount.toFixed(2).split('.'); // <-- HIGHLIGHTED
     if (integerPart.length <= 3) {
-        return integerPart.concat('.', decimalPart);
+        let formatted = integerPart + '.' + decimalPart;
+        return isNegative ? ('-' + formatted) : formatted; // <-- HIGHLIGHTED
     }
-
     const lastThreeDigits = integerPart.slice(-3);
     let otherDigits = integerPart.slice(0, -3);
-
     let formatted = '';
     while (otherDigits.length > 0) {
         if (otherDigits.length > 2) {
@@ -27,8 +27,8 @@ const formatIndianCurrency = (amount) => {
             otherDigits = '';
         }
     }
-
-    return formatted + lastThreeDigits + '.' + decimalPart;
+    formatted = formatted + lastThreeDigits + '.' + decimalPart; // <-- HIGHLIGHTED
+    return isNegative ? ('-' + formatted) : formatted; // <-- HIGHLIGHTED
 };
 
 // Function to get the month number from a month string
@@ -108,8 +108,8 @@ const getPreviousMonth = () => {
 // Function to get the current month in MMM-YY format
 const getCurrentMonth = () => {
     const now = new Date();
-     now.setDate(1);
-  now.setMonth(now.getMonth() - 1);
+    now.setDate(1);
+    now.setMonth(now.getMonth() - 1);
     const months = [
         "Jan", "Feb", "Mar", "Apr", "May", "Jun",
         "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -248,7 +248,7 @@ const GstRecoPage = () => {
             Description: 'Total', Records: 0, Taxable_Value_2B: 0, Taxable_Value_PR: 0, IGST_2B: 0, IGST_PR: 0, CGST_2B: 0, CGST_PR: 0, SGST_2B: 0, SGST_PR: 0, Cess_2B: 0, Cess_PR: 0
         });
     };
-    
+
     const totals3B = calculateDetailedTotals(summary3BStatus);
     const totalsStatus = calculateDetailedTotals(summaryStatus);
 
@@ -373,7 +373,7 @@ const GstRecoPage = () => {
             'Status': 'Status',
             'ThreeB_Status': 'ThreeB Status'
         };
-        
+
         const recoHeaders = Object.values(headerMap);
 
         const wsReco = XLSX.utils.json_to_sheet(reconciliationResults.map(row => {
@@ -382,7 +382,8 @@ const GstRecoPage = () => {
                 if (headerMap[key]) {
                     const formattedKey = headerMap[key];
                     if (key.includes('Taxable') || key.includes('IGST') || key.includes('CGST') || key.includes('SGST') || key.includes('Cess') || key.includes('Diff')) {
-                        newRow[formattedKey] = formatIndianCurrency(row[key]);
+                        newRow[formattedKey] = row[key]; // Write raw number to Excel cells (no string formatting)
+
                     } else {
                         newRow[formattedKey] = row[key];
                     }
@@ -412,24 +413,25 @@ const GstRecoPage = () => {
         wsReco['!cols'] = wscolsReco;
 
         XLSX.utils.book_append_sheet(wb, wsReco, 'Reco');
-        
+
         // --- Create 'Summary' Sheet with detailed headers for both tables ---
         const detailedSummaryHeaders = ['Description', 'Records', 'Taxable Value 2B', 'Taxable Value PR', 'IGST 2B', 'IGST PR', 'CGST 2B', 'CGST PR', 'SGST 2B', 'SGST PR', 'Cess 2B', 'Cess PR'];
 
         const formatDetailedSummaryRow = (row) => ([
             row.Description,
             row.Records,
-            formatIndianCurrency(row.Taxable_Value_2B),
-            formatIndianCurrency(row.Taxable_Value_PR),
-            formatIndianCurrency(row.IGST_2B),
-            formatIndianCurrency(row.IGST_PR),
-            formatIndianCurrency(row.CGST_2B),
-            formatIndianCurrency(row.CGST_PR),
-            formatIndianCurrency(row.SGST_2B),
-            formatIndianCurrency(row.SGST_PR),
-            formatIndianCurrency(row.Cess_2B),
-            formatIndianCurrency(row.Cess_PR),
+            row.Taxable_Value_2B,
+            row.Taxable_Value_PR,
+            row.IGST_2B,
+            row.IGST_PR,
+            row.CGST_2B,
+            row.CGST_PR,
+            row.SGST_2B,
+            row.SGST_PR,
+            row.Cess_2B,
+            row.Cess_PR,
         ]);
+
 
         const summaryData = [
             ...summary3BStatus.map(formatDetailedSummaryRow),
@@ -441,19 +443,21 @@ const GstRecoPage = () => {
 
         const wsSummary = XLSX.utils.aoa_to_sheet([detailedSummaryHeaders, ...summaryData]);
 
-        detailedSummaryHeaders.forEach((header, index) => {
-            const cellRef = XLSX.utils.encode_cell({ c: index, r: 0 });
-            if (wsSummary[cellRef]) {
-                wsSummary[cellRef].s = headerStyle;
-            }
-        });
+        // Apply styles and autofit to the 'Summary' sheet
+        const summaryDataRange = wsSummary['!ref'] ? XLSX.utils.decode_range(wsSummary['!ref']) : null;
+        if (summaryDataRange) {
+            const numberCols = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]; // indices of numeric columns
 
-        const summaryDataRange = XLSX.utils.decode_range(wsSummary['!ref']);
-        for (let R = summaryDataRange.s.r + 1; R <= summaryDataRange.e.r; ++R) {
-            for (let C = summaryDataRange.s.c; C <= summaryDataRange.e.c; ++C) {
-                const cellRef = XLSX.utils.encode_cell({ c: C, r: R });
-                if (wsSummary[cellRef]) {
-                    wsSummary[cellRef].s = dataStyle;
+            for (let R = summaryDataRange.s.r; R <= summaryDataRange.e.r; ++R) {
+                for (let C = summaryDataRange.s.c; C <= summaryDataRange.e.c; ++C) {
+                    const cellRef = XLSX.utils.encode_cell({ c: C, r: R });
+                    if (wsSummary[cellRef]) {
+                        wsSummary[cellRef].s = R === summaryDataRange.s.r ? headerStyle : dataStyle;
+
+                        if (numberCols.includes(C) && wsSummary[cellRef].t === 'n') {
+                            wsSummary[cellRef].z = '#,##,##0.00;[Red]-#,##,##0.00';
+                        }
+                    }
                 }
             }
         }
@@ -639,7 +643,7 @@ const GstRecoPage = () => {
                         <tr className="totals-row">
                             <td>{totals.Description}</td>
                             <td>{totals.Records}</td>
-                             {headers.slice(2).map((header, colIndex) => (
+                            {headers.slice(2).map((header, colIndex) => (
                                 <td key={colIndex}>
                                     {formatIndianCurrency(totals[header.replace(/\s/g, '_')])}
                                 </td>
