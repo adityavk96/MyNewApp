@@ -7,7 +7,7 @@ const SideMenu = ({ isOpen, toggleMenu }) => {
     { name: 'Login', path: '/login' },
     { name: 'Home', path: '/' },
     { name: 'Services', path: '/services' },
-    { name: 'About', path: '/about' }, // Added for future use
+    { name: 'Converter', path: '/converter' }, // Added for future use
   ];
 
   return (

@@ -6,6 +6,7 @@ import Services from './my components/Services'; // Import the new Services page
 import SideMenu from './my components/SideMenu';
 import Login from './my components/login';
 import GstReco from './my components/GstReco';
+import Converter from './my components/Converter';
 import './App.css';
 
 function App() {
@@ -39,6 +40,7 @@ function App() {
           <Route path="/services" element={<Services />} />
           <Route path="/login" element={<Login />} />
           <Route path="/gst-reco" element={<GstReco />} />
+          <Route path="/converter" element={<Converter />} />
           {/*<Route path="/gst-reco" element={<GstReco2B />} />*/}
           {/* You can add an About page route here later */}
           {/* <Route path="/about" element={<About />} /> */}
