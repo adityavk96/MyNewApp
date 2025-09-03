@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@nutrient-sdk/viewer": "^1.6.0",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/table-core": "^8.21.3",
     "@testing-library/dom": "^10.4.1",
@@ -15,6 +14,7 @@
     "firebase": "^12.1.0",
     "jspdf": "^3.0.2",
     "lucide-react": "^0.539.0",
+    "pdf-merger-js": "^5.1.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-feather": "^2.0.10",
