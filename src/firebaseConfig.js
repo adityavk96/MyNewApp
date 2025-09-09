@@ -6,17 +6,15 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyAxHZeTDr94S7cbBah9RZd0-5XBV_EBxK4",
-  authDomain: "ishika-gst.firebaseapp.com",
-  projectId: "ishika-gst",
-  storageBucket: "ishika-gst.appspot.com",
-  messagingSenderId: "691326701729",
-  appId: "1:691326701729:web:19f09c850e85babdb8e0e0",
-  measurementId: "G-M72SCMXWDF"
-};
+ // Your web app's Firebase configuration
+  const firebaseConfig = {
+    apiKey: "AIzaSyDDq1xP9O0qAt32iFwgtH-AWqhKwyaumC4",
+    authDomain: "rate-93e55.firebaseapp.com",
+    projectId: "rate-93e55",
+    storageBucket: "rate-93e55.firebasestorage.app",
+    messagingSenderId: "146828869368",
+    appId: "1:146828869368:web:52417b2af652c3d045450d"
+  };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
