@@ -6,15 +6,16 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
- // Your web app's Firebase configuration
-  const firebaseConfig = {
-    apiKey: "AIzaSyDDq1xP9O0qAt32iFwgtH-AWqhKwyaumC4",
-    authDomain: "rate-93e55.firebaseapp.com",
-    projectId: "rate-93e55",
-    storageBucket: "rate-93e55.firebasestorage.app",
-    messagingSenderId: "146828869368",
-    appId: "1:146828869368:web:52417b2af652c3d045450d"
-  };
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyADeyKqxPhn-2saYmU7xYHrO9X61hFrHnk",
+  authDomain: "milkrates.firebaseapp.com",
+  projectId: "milkrates",
+  storageBucket: "milkrates.firebasestorage.app",
+  messagingSenderId: "59115845629",
+  appId: "1:59115845629:web:889f55d091b9a89c374b94"
+};
+
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
