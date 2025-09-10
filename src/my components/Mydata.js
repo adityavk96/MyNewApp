@@ -32,6 +32,7 @@ function formatDateDDMMYYYY(dateObjOrString) {
   const year = date.getFullYear();
   return `${day}-${month}-${year}`;
 }
+
 function formatDate(excelDate) {
   if (typeof excelDate === "number") {
     const jsDate = new Date(Date.UTC(0, 0, excelDate - 1));
@@ -39,6 +40,7 @@ function formatDate(excelDate) {
   }
   return formatDateDDMMYYYY(excelDate);
 }
+
 function isValidDate(dateStr) {
   const regex = /^\d{2}-\d{2}-\d{4}$/;
   if (!regex.test(dateStr)) return false;
@@ -52,7 +54,6 @@ function isValidDate(dateStr) {
 }
 
 export default function DataTable() {
-  // Using localStorage hook instead of Firestore
   const [data, setData] = useLocalStorage("gstData", []);
   const [allDateKeys, setAllDateKeys] = useLocalStorage("gstDateKeys", []);
   const [sortDirection, setSortDirection] = useState({});
@@ -60,51 +61,75 @@ export default function DataTable() {
   const fileInputRef = useRef();
   const [pendingUpload, setPendingUpload] = useState(null);
 
-  // Overwrite wide data - localStorage set
+  // Overwrite wide data - merge rows with same VLCCID
   function batchWideOverwrite(rows) {
-    setData(rows);
+    const uniqueMap = new Map();
 
-    // Rebuild date keys
-    const datesSet = new Set();
     rows.forEach((row) => {
+      if (!uniqueMap.has(row.VLCCID)) {
+        uniqueMap.set(row.VLCCID, { ...row });
+      } else {
+        // Merge duplicate VLCCID rows: add/overwrite date rates
+        const existing = uniqueMap.get(row.VLCCID);
+        Object.entries(row).forEach(([k, v]) => {
+          if (k !== "VLCCID" && v) {
+            existing[k] = v; // overwrite latest if duplicate date
+          }
+        });
+        uniqueMap.set(row.VLCCID, existing);
+      }
+    });
+
+    const mergedRows = Array.from(uniqueMap.values());
+    setData(mergedRows);
+
+    // Update date keys
+    const datesSet = new Set();
+    mergedRows.forEach((row) => {
       Object.keys(row).forEach((k) => {
         if (k !== "VLCCID") datesSet.add(k);
       });
     });
     setAllDateKeys(Array.from(datesSet));
+
+    setStatus({ message: "Wide data merged successfully!", type: "success" });
   }
 
-  // Merge long data with localStorage
+  // Merge long data - keeps one row per VLCCID
   function mergeLongRows(newRows) {
     const newDataMap = {};
+
+    // Load existing
     data.forEach((row) => {
       newDataMap[row.VLCCID] = { ...row };
     });
 
+    // Merge new rows
     newRows.forEach((mergeRow) => {
       const { VLCCID, ...rest } = mergeRow;
       if (!newDataMap[VLCCID]) {
         newDataMap[VLCCID] = { VLCCID };
       }
       Object.entries(rest).forEach(([k, v]) => {
-        if (newDataMap[VLCCID][k] !== v) {
-          newDataMap[VLCCID][k] = v;
+        if (v) {
+          newDataMap[VLCCID][k] = v; // overwrite if exists
         }
       });
     });
 
     const updatedData = Object.values(newDataMap);
-
     setData(updatedData);
 
     // Update date keys
     const datesSet = new Set(allDateKeys);
-    newRows.forEach((row) => {
+    updatedData.forEach((row) => {
       Object.keys(row).forEach((k) => {
         if (k !== "VLCCID") datesSet.add(k);
       });
     });
     setAllDateKeys(Array.from(datesSet));
+
+    setStatus({ message: "Long data merged successfully!", type: "success" });
   }
 
   const handleWideUpload = (file) => {
@@ -113,6 +138,7 @@ export default function DataTable() {
       return;
     }
     setStatus({ message: "Uploading wide data...", type: "info" });
+
     const reader = new FileReader();
     reader.onload = (e) => {
       const workbook = XLSX.read(e.target.result, { type: "binary" });
@@ -122,6 +148,7 @@ export default function DataTable() {
         raw: true,
         defval: "",
       });
+
       if (!wideData.length) {
         setStatus({
           message: "Uploaded file is empty or has invalid headers.",
@@ -129,10 +156,12 @@ export default function DataTable() {
         });
         return;
       }
+
       const headers = Object.keys(wideData[0]);
       const vlccidHeader = headers.find(
         (h) => String(h).trim().toLowerCase() === "vlccid"
       );
+
       if (!vlccidHeader) {
         setStatus({
           message: 'Uploaded file must have a "VLCCID" header.',
@@ -140,7 +169,7 @@ export default function DataTable() {
         });
         return;
       }
-      const newAllDates = [];
+
       const newRows = [];
       wideData.forEach((row) => {
         const newRow = { VLCCID: String(row[vlccidHeader]) };
@@ -148,13 +177,12 @@ export default function DataTable() {
           if (header !== vlccidHeader && !String(header).startsWith("__EMPTY")) {
             const formattedDate = isValidDate(header) ? header : formatDate(header);
             newRow[formattedDate] = String(row[header]);
-            if (!newAllDates.includes(formattedDate)) newAllDates.push(formattedDate);
           }
         });
         newRows.push(newRow);
       });
+
       batchWideOverwrite(newRows);
-      setStatus({ message: "Wide data uploaded and stored!", type: "success" });
     };
     reader.readAsBinaryString(file);
   };
@@ -165,15 +193,14 @@ export default function DataTable() {
       return;
     }
     setStatus({ message: "Merging new data...", type: "info" });
+
     const reader = new FileReader();
     reader.onload = (e) => {
       const workbook = XLSX.read(e.target.result, { type: "binary" });
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
-      const newRows = XLSX.utils.sheet_to_json(worksheet, {
-        raw: true,
-        defval: "",
-      });
+      const newRows = XLSX.utils.sheet_to_json(worksheet, { raw: true, defval: "" });
+
       if (!newRows.length) {
         setStatus({
           message: "Uploaded file is empty or has invalid headers.",
@@ -181,12 +208,14 @@ export default function DataTable() {
         });
         return;
       }
+
       const headerMap = {};
       Object.keys(newRows[0]).forEach((key) => {
         if (String(key).trim().toLowerCase() === "vlccid") headerMap.vlccid = key;
         if (String(key).trim().toLowerCase() === "date") headerMap.date = key;
         if (String(key).trim().toLowerCase() === "rate") headerMap.rate = key;
       });
+
       if (!headerMap.vlccid || !headerMap.date || !headerMap.rate) {
         setStatus({
           message: 'Uploaded file must have "VLCCID", "date", and "RATE" headers.',
@@ -194,12 +223,13 @@ export default function DataTable() {
         });
         return;
       }
+
       const formattedRows = newRows.map((row) => ({
         VLCCID: String(row[headerMap.vlccid]),
         [formatDate(row[headerMap.date])]: String(row[headerMap.rate]),
       }));
+
       mergeLongRows(formattedRows);
-      setStatus({ message: "Data merged and saved!", type: "success" });
     };
     reader.readAsBinaryString(file);
   };
@@ -210,11 +240,13 @@ export default function DataTable() {
       return;
     }
     setStatus({ message: "Preparing file for download...", type: "info" });
+
     const sortedDates = [...allDateKeys].sort((a, b) => {
       const dateA = a.split("-").reverse().join("-");
       const dateB = b.split("-").reverse().join("-");
       return new Date(dateB) - new Date(dateA);
     });
+
     const exportData = data.map((row) => {
       const newRow = { VLCCID: row.VLCCID };
       sortedDates.forEach((date) => {
@@ -222,14 +254,15 @@ export default function DataTable() {
       });
       return newRow;
     });
+
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Data Summary");
+
     const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
-    const blob = new Blob([excelBuffer], {
-      type: "application/octet-stream",
-    });
+    const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
     saveAs(blob, "Data Summary.xlsx");
+
     setStatus({ message: "File downloaded successfully!", type: "success" });
   };
 
@@ -244,17 +277,12 @@ export default function DataTable() {
     setData(sorted);
   };
 
-  const isHighlightRow = (row) =>
-    row["12-08-2025"] === "54" || row["12-08-2025"] === "49";
-  const isHighlightCell = (row) =>
-    isHighlightRow(row) || row["12-08-2025"] === "53.25";
-  const isHighlightRowSecondary = (row, key) =>
-    row.VLCCID === "3100015245" && key === "06-08-2025";
   const sortedDates = [...allDateKeys].sort((a, b) => {
     const dateA = a.split("-").reverse().join("-");
     const dateB = b.split("-").reverse().join("-");
     return new Date(dateB) - new Date(dateA);
   });
+
   const statusStyles = {
     success: "bg-green-100 text-green-800 border-green-300",
     error: "bg-red-100 text-red-800 border-red-300",
@@ -274,11 +302,10 @@ export default function DataTable() {
       <h1 className="text-2xl font-bold text-gray-800 mb-4 text-center">
         Data Summary
       </h1>
+
       <div className="flex flex-col md:flex-row items-center justify-center gap-4 mb-6 p-4 border border-dashed border-gray-300 rounded-lg">
         <div className="flex flex-col items-center">
-          <div className="text-gray-600 text-sm mb-2">
-            Click to upload a new Excel file.
-          </div>
+          <div className="text-gray-600 text-sm mb-2">Click to upload a new Excel file.</div>
           <input
             type="file"
             accept=".xlsx, .xls"
@@ -296,6 +323,7 @@ export default function DataTable() {
             Upload Wide Data
           </button>
         </div>
+
         <button
           onClick={() => {
             setPendingUpload("long");
@@ -305,6 +333,7 @@ export default function DataTable() {
         >
           Merge Long Data
         </button>
+
         <button
           onClick={handleDownload}
           className="px-4 py-2 bg-green-600 text-white rounded-lg shadow-md hover:bg-green-700 transition duration-300 whitespace-nowrap"
@@ -312,15 +341,15 @@ export default function DataTable() {
           Download Data
         </button>
       </div>
+
       {status.message && (
         <div
-          className={`status-message border rounded-md px-4 py-2 mt-3 text-center ${
-            statusStyles[status.type]
-          }`}
+          className={`status-message border rounded-md px-4 py-2 mt-3 text-center ${statusStyles[status.type]}`}
         >
           {status.message}
         </div>
       )}
+
       <div className="overflow-x-auto">
         <table className="data-table table-auto min-w-full rounded-lg border-separate border-spacing-0">
           <thead>
@@ -350,22 +379,13 @@ export default function DataTable() {
           </thead>
           <tbody>
             {data.map((row, rIdx) => (
-              <tr
-                key={row.VLCCID + rIdx}
-                className={isHighlightRow(row) ? "bg-red-100" : ""}
-              >
+              <tr key={row.VLCCID + rIdx}>
                 <td className="text-center px-2">{rIdx + 1}</td>
                 <td className="text-center font-medium">{row.VLCCID}</td>
                 {sortedDates.map((key) => (
                   <td
                     key={key}
-                    className={[
-                      "text-center whitespace-nowrap border-b border-gray-200 px-3 py-2",
-                      isHighlightCell(row) && row[key] && "bg-red-100",
-                      isHighlightRowSecondary(row, key) && "bg-yellow-100",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
+                    className="text-center whitespace-nowrap border-b border-gray-200 px-3 py-2"
                   >
                     {row[key] || ""}
                   </td>
