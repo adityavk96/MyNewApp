@@ -15,7 +15,7 @@ const SideMenu = ({ isOpen, toggleMenu, user }) => {
     <>
       {/* This is the main menu that slides in */}
       <aside
-        className={`fixed top-0 left-0 h-full w-64 bg-gray-100 transform transition-transform duration-300 ease-in-out z-40 shadow-lg ${
+        className={`fixed top-0 left-0 h-full w-64 bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 transform transition-transform duration-300 ease-in-out z-40 shadow-lg ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
