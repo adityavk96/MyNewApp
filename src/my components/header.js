@@ -1,23 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 
 const Header = ({ user, onLogout }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   if (!user) {
-    // No user logged in: Show header without avatar
+    // User not logged in, show header without avatar
     return (
       <header className="w-full p-4 bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 flex justify-end relative">
-        {/* You can add a login button here if needed */}
+        {/* Optionally show login button or nothing */}
       </header>
     );
   }
 
-  const userName = user.name || "User";
+  // Prefer name, fallback to displayName or email
+  const userName = user.name || user.displayName || "User";
   const userInitial = userName.charAt(0).toUpperCase();
 
   return (
     <header className="w-full p-4 bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 flex justify-end relative">
-      {/* Avatar Button */}
       <button
         onClick={() => setDropdownOpen(!dropdownOpen)}
         className="w-10 h-10 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold focus:outline-none"
@@ -26,7 +26,6 @@ const Header = ({ user, onLogout }) => {
         {userInitial}
       </button>
 
-      {/* Dropdown menu */}
       {dropdownOpen && (
         <div className="absolute right-4 mt-12 w-44 bg-white rounded-md shadow-lg z-50">
           <div className="px-4 py-2 border-b text-gray-800 font-medium">
@@ -39,7 +38,7 @@ const Header = ({ user, onLogout }) => {
             className="block w-full text-left px-4 py-2 hover:bg-gray-100"
             onClick={() => {
               setDropdownOpen(false);
-              // Add profile navigation logic here
+              // Handle profile navigation here if needed
             }}
           >
             Profile

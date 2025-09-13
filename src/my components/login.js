@@ -1,43 +1,44 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { auth } from "../firebaseConfig";
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 
-const SingleUserAuthTailwind = ({ onLogin }) => {
-  const validEmail = "aditya@gmail.com";
-  const validPassword = "Akv@123456";
-
+const Login = ({ onLogin }) => {
   const navigate = useNavigate();
-
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState(""); // NEW: name for registration
   const [message, setMessage] = useState("");
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isLogin) {
-      if (email === validEmail && password === validPassword) {
-        setMessage("🎉 Login successful!");
-
-        // Notify parent about logged-in user
-        if (onLogin) {
+    setMessage("");
+    try {
+      if (isLogin) {
+        // LOGIN
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        if (onLogin)
           onLogin({
-            name: "Aditya Kumar", // or derive from email if needed
-            email: validEmail,
+            email: user.email,
+            displayName: user.displayName,
           });
-        }
-
-        navigate("/"); // navigate to home page
+        setMessage("🎉 Login successful!");
+        navigate("/");
       } else {
-        setMessage("❌ Invalid email or password.");
+        // REGISTRATION
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        // Set displayName AFTER registration
+        await updateProfile(userCredential.user, { displayName });
+        setMessage("✅ Registration successful! Please login.");
+        setIsLogin(true);
+        setEmail("");
+        setPassword("");
+        setDisplayName("");
       }
-    } else {
-      if (email !== validEmail) {
-        setMessage("⚠️ Registration only allowed for aditya@gmail.com");
-      } else if (password !== validPassword) {
-        setMessage("⚠️ Password does not match the allowed password");
-      } else {
-        setMessage("✅ Registration successful!");
-      }
+    } catch (error) {
+      setMessage(error.message);
     }
   };
 
@@ -49,6 +50,22 @@ const SingleUserAuthTailwind = ({ onLogin }) => {
         </h2>
 
         <form onSubmit={handleSubmit} className="space-y-5">
+          {!isLogin && (
+            <div>
+              <label htmlFor="displayName" className="block mb-1 font-semibold text-gray-700">
+                Full Name
+              </label>
+              <input
+                id="displayName"
+                type="text"
+                placeholder="Full Name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                required
+                className="w-full px-4 py-2 rounded-md border border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+          )}
           <div>
             <label htmlFor="email" className="block mb-1 font-semibold text-gray-700">
               Email address
@@ -63,7 +80,6 @@ const SingleUserAuthTailwind = ({ onLogin }) => {
               className="w-full px-4 py-2 rounded-md border border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
           </div>
-
           <div>
             <label htmlFor="password" className="block mb-1 font-semibold text-gray-700">
               Password
@@ -78,7 +94,6 @@ const SingleUserAuthTailwind = ({ onLogin }) => {
               className="w-full px-4 py-2 rounded-md border border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
             />
           </div>
-
           <button
             type="submit"
             className="w-full py-3 bg-purple-600 text-white rounded-md font-semibold hover:bg-purple-700 transition"
@@ -86,17 +101,11 @@ const SingleUserAuthTailwind = ({ onLogin }) => {
             {isLogin ? "Login" : "Register"}
           </button>
         </form>
-
         {message && (
-          <p
-            className={`mt-4 text-center ${
-              message.includes("successful") ? "text-green-600" : "text-red-600"
-            } font-medium`}
-          >
+          <p className={`mt-4 text-center ${message.toLowerCase().includes("successful") ? "text-green-600" : "text-red-600"} font-medium`}>
             {message}
           </p>
         )}
-
         <p className="mt-6 text-center text-gray-600">
           {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
           <button
@@ -105,6 +114,7 @@ const SingleUserAuthTailwind = ({ onLogin }) => {
               setMessage("");
               setEmail("");
               setPassword("");
+              setDisplayName("");
             }}
             className="text-purple-700 font-semibold hover:underline focus:outline-none"
           >
@@ -116,4 +126,4 @@ const SingleUserAuthTailwind = ({ onLogin }) => {
   );
 };
 
-export default SingleUserAuthTailwind;
+export default Login;
