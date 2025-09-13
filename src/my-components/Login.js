@@ -1,14 +1,18 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { auth } from "../firebaseConfig";
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
+} from "firebase/auth";
 
 const Login = ({ onLogin }) => {
   const navigate = useNavigate();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [displayName, setDisplayName] = useState(""); // NEW: name for registration
+  const [displayName, setDisplayName] = useState(""); // For registration
   const [message, setMessage] = useState("");
 
   const handleSubmit = async (e) => {
@@ -16,7 +20,6 @@ const Login = ({ onLogin }) => {
     setMessage("");
     try {
       if (isLogin) {
-        // LOGIN
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
         if (onLogin)
@@ -27,9 +30,7 @@ const Login = ({ onLogin }) => {
         setMessage("🎉 Login successful!");
         navigate("/");
       } else {
-        // REGISTRATION
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        // Set displayName AFTER registration
         await updateProfile(userCredential.user, { displayName });
         setMessage("✅ Registration successful! Please login.");
         setIsLogin(true);
@@ -38,7 +39,11 @@ const Login = ({ onLogin }) => {
         setDisplayName("");
       }
     } catch (error) {
-      setMessage(error.message);
+      if (error.code === "auth/invalid-credential") {
+        setMessage("User not registered, please register.");
+      } else {
+        setMessage(error.message);
+      }
     }
   };
 
