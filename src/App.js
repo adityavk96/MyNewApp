@@ -17,9 +17,7 @@ function App() {
 
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
 
-  // Called after successful login
   const handleLogin = (loggedInUser) => {
-    // Use displayName if available or fallback to email
     const userName = loggedInUser.displayName || loggedInUser.name || loggedInUser.email;
     setUser({ ...loggedInUser, name: userName });
     navigate("/");
