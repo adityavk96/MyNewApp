@@ -668,7 +668,7 @@ const GstRecoPage = () => {
         .gst-reco-container {
             font-family: Arial, sans-serif;
            padding-top: 20px;
-            background-color:white;
+            background-color:transparent;
             border-radius: 1px;
             box-shadow: 0 2px 2px rgba(0, 0, 0, 0.1);
             max-width: 1300px;
@@ -778,7 +778,7 @@ const GstRecoPage = () => {
         }
 
         .data-section {
-            background-color: #fff;
+            background-color: transparent;
             border-radius: 0.5px;
             padding: 15px;
             margin-bottom: 5px;
@@ -951,6 +951,8 @@ const GstRecoPage = () => {
     const detailedSummaryHeaders = ['Description', 'Records', 'Taxable Value 2B', 'Taxable Value PR', 'IGST 2B', 'IGST PR', 'CGST 2B', 'CGST PR', 'SGST 2B', 'SGST PR', 'Cess 2B', 'Cess PR'];
 
     return (
+        <main className="min-h-screen bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 p-6">
+   
         <>
             <style>{cssStyles}</style>
             <div className="gst-reco-container">
@@ -1018,6 +1020,7 @@ const GstRecoPage = () => {
                 )}
             </div>
         </>
+        </main>
     );
 };
 

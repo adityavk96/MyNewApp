@@ -1,9 +1,119 @@
-import React from 'react'
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-export default function login() {
+const SingleUserAuthTailwind = ({ onLogin }) => {
+  const validEmail = "aditya@gmail.com";
+  const validPassword = "Akv@123456";
+
+  const navigate = useNavigate();
+
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (isLogin) {
+      if (email === validEmail && password === validPassword) {
+        setMessage("🎉 Login successful!");
+
+        // Notify parent about logged-in user
+        if (onLogin) {
+          onLogin({
+            name: "Aditya Kumar", // or derive from email if needed
+            email: validEmail,
+          });
+        }
+
+        navigate("/"); // navigate to home page
+      } else {
+        setMessage("❌ Invalid email or password.");
+      }
+    } else {
+      if (email !== validEmail) {
+        setMessage("⚠️ Registration only allowed for aditya@gmail.com");
+      } else if (password !== validPassword) {
+        setMessage("⚠️ Password does not match the allowed password");
+      } else {
+        setMessage("✅ Registration successful!");
+      }
+    }
+  };
+
   return (
-    <div>
-      <p> No need to login yet</p>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 p-6">
+      <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
+        <h2 className="text-3xl font-bold text-center mb-6 text-purple-700">
+          {isLogin ? "Login" : "Register"}
+        </h2>
+
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label htmlFor="email" className="block mb-1 font-semibold text-gray-700">
+              Email address
+            </label>
+            <input
+              id="email"
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full px-4 py-2 rounded-md border border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="password" className="block mb-1 font-semibold text-gray-700">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full px-4 py-2 rounded-md border border-purple-300 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full py-3 bg-purple-600 text-white rounded-md font-semibold hover:bg-purple-700 transition"
+          >
+            {isLogin ? "Login" : "Register"}
+          </button>
+        </form>
+
+        {message && (
+          <p
+            className={`mt-4 text-center ${
+              message.includes("successful") ? "text-green-600" : "text-red-600"
+            } font-medium`}
+          >
+            {message}
+          </p>
+        )}
+
+        <p className="mt-6 text-center text-gray-600">
+          {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
+          <button
+            onClick={() => {
+              setIsLogin(!isLogin);
+              setMessage("");
+              setEmail("");
+              setPassword("");
+            }}
+            className="text-purple-700 font-semibold hover:underline focus:outline-none"
+          >
+            {isLogin ? "Register here" : "Login here"}
+          </button>
+        </p>
+      </div>
     </div>
-  )
-}
+  );
+};
+
+export default SingleUserAuthTailwind;

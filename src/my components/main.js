@@ -38,8 +38,7 @@ const Main = () => {
   };
 
   return (
-    <main className="relative flex flex-col min-h-screen w-full bg-night p-4">
-      
+    <main className="relative flex flex-col min-h-screen w-full bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 p-4">
       {/* Top-right avatar (only if user logged in) */}
       {userName && (
         <div className="absolute top-4 right-4">
@@ -74,10 +73,10 @@ const Main = () => {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col items-center justify-center text-center">
-        <h1 className="text-4xl font-bold text-gray-800">
+        <h1 className="text-4xl font-bold text-white">
           Welcome {userName || 'Guest'}!
         </h1>
-        <p className="mt-4 text-lg text-gray-600">
+        <p className="mt-4 text-lg text-white/90">
           This is a minimalist application with a side menu.
         </p>
       </div>
