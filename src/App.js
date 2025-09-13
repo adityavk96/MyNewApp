@@ -1,12 +1,12 @@
 import React, { useState } from "react";
 import { Routes, Route, useNavigate } from "react-router-dom";
-import Header from "./my components/header";
-import Main from "./my components/main";
-import Services from "./my components/Services";
-import SideMenu from "./my components/SideMenu";
-import Login from "./my components/Login";
-import GstRecoPage from "./my components/GstReco";
-import ProtectedRoute from "./my components/ProtectedRoute";
+import Header from "./my-components/header";
+import Main from "./my-components/main";
+import Services from "./my-components/Services";
+import SideMenu from "./my-components/SideMenu";
+import Login from "./my-components/Login";
+import GstRecoPage from "./my-components/GstReco";
+import ProtectedRoute from "./my-components/ProtectedRoute";
 import "./App.css";
 
 function App() {
